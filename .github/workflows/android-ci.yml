@@ -33,19 +33,19 @@ jobs:
       - name: Run Android unit tests
         run: ./gradlew :app:testDebugUnitTest --stacktrace
 
-      - name: Build Debug APK
-        run: ./gradlew :app:assembleDebug --stacktrace
+      - name: Build Debug & Release APKs
+        run: ./gradlew :app:assembleDebug :app:assembleRelease --stacktrace
 
       - name: Prepare named APK artifact
         run: |
           TAG_OR_SHA="${GITHUB_REF_NAME}"
           mkdir -p dist
-          cp app/build/outputs/apk/debug/app-debug.apk "dist/EasyGo-Pedometer-${TAG_OR_SHA}-debug.apk"
+          cp app/build/outputs/apk/release/app-release.apk "dist/EasyGo-Pedometer-${TAG_OR_SHA}.apk"
 
-      - name: Upload Debug APK artifact
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: easygo-pedometer-debug-apk
+          name: easygo-pedometer-apk
           path: dist/*.apk
 
       - name: Publish GitHub Release on tag
@@ -53,8 +53,8 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          APK_FILE="dist/EasyGo-Pedometer-${GITHUB_REF_NAME}-debug.apk"
+          APK_FILE="dist/EasyGo-Pedometer-${GITHUB_REF_NAME}.apk"
           gh release create "${GITHUB_REF_NAME}" "${APK_FILE}" \
             --title "EasyGo-Pedometer ${GITHUB_REF_NAME} (測試版 APK)" \
-            --notes "自動建置並通過全部單元測試（`:core-calc:test` 與 `:app:testDebugUnitTest`）。請下載下方 \`.apk\` 檔案於 Android 手機安裝測試。" \
+            --notes "已通過全部單元測試並經 R8 瘦身優化（支援 Android 7.0+ / minSdk 24、v1+v2 雙重簽章）。若 OPPO 舊版系統安裝時仍卡在安全掃描轉圈，請暫時關閉 Wi-Fi/行動網路（離線安裝）即可秒裝。" \
             --prerelease
