@@ -352,9 +352,9 @@ fun HomeScreen(
                     BikeIcon(tint = BrightYellow)
                     Spacer(modifier = Modifier.width(12.dp))
                     Text(
-                        text = "GPS 單車時速表",
+                        text = "GPS 即時時速表（單車 / 車輛 / 高鐵）",
                         color = BrightYellow,
-                        fontSize = 18.sp,
+                        fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
                     )
                 }

@@ -10,6 +10,7 @@ import android.os.Looper
 import com.cs22study.easygopedometer.calc.GpsPoint
 import com.cs22study.easygopedometer.calc.GpsRideCalculator
 import com.cs22study.easygopedometer.calc.GpsRideState
+import com.cs22study.easygopedometer.calc.SpeedMode
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -83,9 +84,13 @@ class GpsRideTracker(context: Context) {
         stopUpdates()
     }
 
+    fun setSpeedMode(mode: SpeedMode) {
+        _rideState.value = _rideState.value.copy(speedMode = mode)
+    }
+
     fun resetRide() {
         stopUpdates()
-        _rideState.value = GpsRideState()
+        _rideState.value = GpsRideState(speedMode = _rideState.value.speedMode)
     }
 
     fun stopUpdates() {

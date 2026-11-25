@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -111,6 +112,22 @@ fun SpeedometerGauge(
             val cx = size.width / 2f + (radius * cos(rad)).toFloat()
             val cy = size.height / 2f + (radius * sin(rad)).toFloat()
             drawCircle(color = Color.White, radius = 6.dp.toPx(), center = Offset(cx, cy))
+
+            // Scale labels: 0, mid, maxScaleKmh
+            val scalePaint = android.graphics.Paint().apply {
+                color = android.graphics.Color.argb(215, 255, 214, 0)
+                textSize = 11.dp.toPx()
+                isFakeBoldText = true
+                isAntiAlias = true
+                textAlign = android.graphics.Paint.Align.CENTER
+            }
+            val labelR = radius + 16.dp.toPx()
+            listOf(0f to "0", 0.5f to "${(maxScaleKmh / 2f).toInt()}", 1f to "${maxScaleKmh.toInt()}").forEach { (f, txt) ->
+                val aRad = Math.toRadians((140f + 260f * f).toDouble())
+                val lx = size.width / 2f + (labelR * cos(aRad)).toFloat()
+                val ly = size.height / 2f + (labelR * sin(aRad)).toFloat() + 4.dp.toPx()
+                drawContext.canvas.nativeCanvas.drawText(txt, lx, ly, scalePaint)
+            }
         }
 
         Column(horizontalAlignment = Alignment.CenterHorizontally) {

@@ -1,9 +1,26 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
 }
+
+val keystorePropsFile = rootProject.file("keystore/keystore.properties")
+val keystoreProps = Properties().apply {
+    if (keystorePropsFile.exists()) {
+        keystorePropsFile.inputStream().use { load(it) }
+    }
+}
+
+val envKeystorePath = System.getenv("ANDROID_KEYSTORE_PATH")
+val envKeystorePass = System.getenv("ANDROID_KEYSTORE_PASS")
+val envKeyAlias = System.getenv("ANDROID_KEY_ALIAS")
+val envKeyPass = System.getenv("ANDROID_KEY_PASS")
+
+val hasReleaseKeystore = (!envKeystorePath.isNullOrBlank() && file(envKeystorePath).exists()) ||
+    (keystorePropsFile.exists() && !keystoreProps.getProperty("storeFile").isNullOrBlank())
 
 android {
     namespace = "com.cs22study.easygopedometer"
@@ -13,8 +30,8 @@ android {
         applicationId = "com.cs22study.easygopedometer"
         minSdk = 24
         targetSdk = 35
-        versionCode = 6
-        versionName = "0.4.0"
+        versionCode = 7
+        versionName = "0.5.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -28,6 +45,30 @@ android {
         }
     }
 
+    signingConfigs {
+        getByName("debug") {
+            enableV1Signing = true
+            enableV2Signing = true
+        }
+        if (hasReleaseKeystore) {
+            create("releasePersistent") {
+                if (!envKeystorePath.isNullOrBlank() && file(envKeystorePath).exists()) {
+                    storeFile = file(envKeystorePath)
+                    storePassword = envKeystorePass
+                    keyAlias = envKeyAlias
+                    keyPassword = envKeyPass
+                } else {
+                    storeFile = rootProject.file("keystore/${keystoreProps.getProperty("storeFile")}")
+                    storePassword = keystoreProps.getProperty("storePassword")
+                    keyAlias = keystoreProps.getProperty("keyAlias")
+                    keyPassword = keystoreProps.getProperty("keyPassword")
+                }
+                enableV1Signing = true
+                enableV2Signing = true
+            }
+        }
+    }
+
     buildTypes {
         debug {
             signingConfig = signingConfigs.getByName("debug")
@@ -35,18 +76,15 @@ android {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (hasReleaseKeystore) {
+                signingConfigs.getByName("releasePersistent")
+            } else {
+                signingConfigs.getByName("debug")
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-        }
-    }
-
-    signingConfigs {
-        getByName("debug") {
-            enableV1Signing = true
-            enableV2Signing = true
         }
     }
 

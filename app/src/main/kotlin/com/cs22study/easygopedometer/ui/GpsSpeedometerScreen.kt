@@ -5,6 +5,7 @@ import android.net.Uri
 import android.view.WindowManager
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -36,14 +37,17 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.cs22study.easygopedometer.calc.ActiveTimeTracker
 import com.cs22study.easygopedometer.calc.DateDisplayFormatter
 import com.cs22study.easygopedometer.calc.GpsRideState
+import com.cs22study.easygopedometer.calc.SpeedMode
 import com.cs22study.easygopedometer.service.CapturedScreenshot
 import kotlinx.coroutines.delay
 import java.time.LocalDate
@@ -60,6 +64,7 @@ fun GpsSpeedometerScreen(
     isGpsEnabled: Boolean,
     capturedScreenshot: CapturedScreenshot?,
     onBack: () -> Unit,
+    onSelectSpeedMode: (SpeedMode) -> Unit,
     onRequestLocationPermission: () -> Unit,
     onStartRide: () -> Unit,
     onPauseRide: () -> Unit,
@@ -71,7 +76,7 @@ fun GpsSpeedometerScreen(
 ) {
     val context = LocalContext.current
 
-    // Keep screen awake while riding
+    // Keep screen awake while measuring speed
     DisposableEffect(Unit) {
         val window = (context as? Activity)?.window
         window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -128,7 +133,7 @@ fun GpsSpeedometerScreen(
                     }
                     Column {
                         Text(
-                            text = "GPS 單車時速表",
+                            text = "GPS 即時時速表",
                             color = BrightYellow,
                             fontSize = 17.sp,
                             fontWeight = FontWeight.Bold,
@@ -154,8 +159,41 @@ fun GpsSpeedometerScreen(
                     .navigationBarsPadding()
                     .padding(horizontal = 16.dp, vertical = 12.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(14.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
+                // 3-Mode Scale Selector: 單車(60) | 汽車火車(150) | 高鐵(400)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(GpsCardBg)
+                        .padding(4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    SpeedMode.entries.forEach { mode ->
+                        val selected = mode == rideState.speedMode
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(if (selected) BrightYellow else Color.Transparent)
+                                .clickable { onSelectSpeedMode(mode) }
+                                .padding(vertical = 8.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = "${mode.label}(${mode.maxScaleKmh.toInt()})",
+                                color = if (selected) Color.Black else BrightYellow.copy(alpha = 0.85f),
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                textAlign = TextAlign.Center,
+                                maxLines = 1,
+                                softWrap = false,
+                            )
+                        }
+                    }
+                }
+
                 // GPS Status Pill
                 Surface(
                     color = GpsCardBg,
@@ -172,22 +210,25 @@ fun GpsSpeedometerScreen(
                     )
                 }
 
-                // Speedometer Gauge
-                SpeedometerGauge(speedKmh = rideState.currentSpeedKmh)
+                // Speedometer Gauge scaled dynamically by selected mode (60 / 150 / 400 km/h)
+                SpeedometerGauge(
+                    speedKmh = rideState.currentSpeedKmh,
+                    maxScaleKmh = rideState.speedMode.maxScaleKmh,
+                )
 
-                // 2x2 Cycling Metrics Grid
+                // 2x2 Metrics Grid
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     GpsMetricCard(
-                        title = "騎乘時間",
+                        title = "行程時間",
                         value = ActiveTimeTracker.formatDuration(rideState.elapsedSeconds),
                         unit = "時:分:秒",
                         modifier = Modifier.weight(1f),
                     )
                     GpsMetricCard(
-                        title = "騎乘距離",
+                        title = "移動距離",
                         value = distanceText.first,
                         unit = distanceText.second,
                         modifier = Modifier.weight(1f),
@@ -205,7 +246,7 @@ fun GpsSpeedometerScreen(
                         modifier = Modifier.weight(1f),
                     )
                     GpsMetricCard(
-                        title = "燃燒熱量",
+                        title = if (rideState.speedMode.trackCalories) "燃燒熱量" else "燃燒熱量(乘車不計)",
                         value = "%.1f".format(rideState.caloriesKcal),
                         unit = "千卡",
                         modifier = Modifier.weight(1f),
@@ -241,8 +282,8 @@ fun GpsSpeedometerScreen(
                         Text(
                             text = when {
                                 !hasLocationPermission -> "授權 GPS 定位"
-                                rideState.isTracking -> "暫停騎乘"
-                                else -> "開始騎乘"
+                                rideState.isTracking -> "暫停測速"
+                                else -> "開始測速"
                             },
                             fontSize = 17.sp,
                             fontWeight = FontWeight.Bold,
@@ -300,13 +341,15 @@ private fun GpsMetricCard(
                 color = BrightYellow.copy(alpha = 0.85f),
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                softWrap = false,
             )
             Spacer(modifier = Modifier.height(6.dp))
             Row(verticalAlignment = Alignment.Bottom) {
                 Text(
                     text = value,
                     color = BrightYellow,
-                    fontSize = if (value.length >= 9) 19.sp else 24.sp,
+                    fontSize = if (value.length >= 9) 18.sp else 23.sp,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1,
                     softWrap = false,

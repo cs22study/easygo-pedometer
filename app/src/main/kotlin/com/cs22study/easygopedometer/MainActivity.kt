@@ -179,6 +179,7 @@ class MainActivity : ComponentActivity() {
                             isGpsEnabled = vm.isGpsEnabled(),
                             capturedScreenshot = uiState.capturedScreenshot,
                             onBack = { currentRoute = AppRoute.HOME },
+                            onSelectSpeedMode = vm::setSpeedMode,
                             onRequestLocationPermission = {
                                 locationLauncher.launch(
                                     arrayOf(

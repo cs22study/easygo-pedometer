@@ -10,6 +10,7 @@ import com.cs22study.easygopedometer.calc.GpsRideState
 import com.cs22study.easygopedometer.calc.HourlyCsvRecord
 import com.cs22study.easygopedometer.calc.PeriodAggregator
 import com.cs22study.easygopedometer.calc.PeriodSummaryView
+import com.cs22study.easygopedometer.calc.SpeedMode
 import com.cs22study.easygopedometer.data.LocalCsvExporter
 import com.cs22study.easygopedometer.data.PowerMode
 import com.cs22study.easygopedometer.data.PreferencesRepository
@@ -312,6 +313,10 @@ class PedometerViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun isGpsEnabled(): Boolean = gpsTracker.isGpsProviderEnabled()
+
+    fun setSpeedMode(mode: SpeedMode) {
+        gpsTracker.setSpeedMode(mode)
+    }
 
     fun startBikeRide() {
         gpsTracker.startRide(prefsRepo.settings.value.profile.weightKg)

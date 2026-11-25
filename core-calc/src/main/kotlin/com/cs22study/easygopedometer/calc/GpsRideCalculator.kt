@@ -7,6 +7,36 @@ import kotlin.math.roundToLong
 import kotlin.math.sin
 import kotlin.math.sqrt
 
+enum class SpeedMode(
+    val label: String,
+    val maxScaleKmh: Float,
+    val maxPlausibleKmh: Double,
+    val maxAcceptableAccuracyM: Float,
+    val trackCalories: Boolean,
+) {
+    BIKE(
+        label = "單車",
+        maxScaleKmh = 60f,
+        maxPlausibleKmh = 120.0,
+        maxAcceptableAccuracyM = 35f,
+        trackCalories = true,
+    ),
+    CAR_TRAIN(
+        label = "汽車火車",
+        maxScaleKmh = 150f,
+        maxPlausibleKmh = 220.0,
+        maxAcceptableAccuracyM = 65f,
+        trackCalories = false,
+    ),
+    HSR(
+        label = "高鐵",
+        maxScaleKmh = 400f,
+        maxPlausibleKmh = 450.0,
+        maxAcceptableAccuracyM = 65f,
+        trackCalories = false,
+    ),
+}
+
 data class GpsPoint(
     val latitude: Double,
     val longitude: Double,
@@ -17,6 +47,7 @@ data class GpsPoint(
 
 data class GpsRideState(
     val isTracking: Boolean = false,
+    val speedMode: SpeedMode = SpeedMode.BIKE,
     val currentSpeedKmh: Double = 0.0,
     val maxSpeedKmh: Double = 0.0,
     val avgSpeedKmh: Double = 0.0,
@@ -28,14 +59,13 @@ data class GpsRideState(
 )
 
 /**
- * Pure Kotlin GPS cycling speedometer calculator with Haversine fallback and anti-drift filtering.
+ * Pure Kotlin GPS speedometer calculator supporting Bike (60 km/h), Car/Train (150 km/h),
+ * and High-Speed Rail (400 km/h), with Haversine fallback and anti-drift filtering.
  */
 object GpsRideCalculator {
 
     private const val EARTH_RADIUS_METERS = 6371000.0
-    private const val MAX_ACCEPTABLE_ACCURACY_M = 35f
     private const val MIN_MOVING_SPEED_KMH = 1.5
-    private const val MAX_PLAUSIBLE_BIKE_KMH = 120.0
 
     fun haversineMeters(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
         val dLat = Math.toRadians(lat2 - lat1)
@@ -60,17 +90,18 @@ object GpsRideCalculator {
         point: GpsPoint,
         weightKg: Double = 68.0,
     ): GpsRideState {
+        val mode = current.speedMode
         if (!current.isTracking) {
             return current.copy(lastAccuracyMeters = point.accuracyMeters)
         }
-        if (point.accuracyMeters > MAX_ACCEPTABLE_ACCURACY_M) {
+        if (point.accuracyMeters > mode.maxAcceptableAccuracyM) {
             return current.copy(lastAccuracyMeters = point.accuracyMeters)
         }
 
         val prev = current.lastFix
         if (prev == null) {
             val rawSpeedKmh = (point.speedMps?.toDouble()?.times(3.6) ?: 0.0)
-                .let { if (it < MIN_MOVING_SPEED_KMH || it > MAX_PLAUSIBLE_BIKE_KMH) 0.0 else it }
+                .let { if (it < MIN_MOVING_SPEED_KMH || it > mode.maxPlausibleKmh) 0.0 else it }
             return current.copy(
                 currentSpeedKmh = round1(rawSpeedKmh),
                 maxSpeedKmh = maxOf(current.maxSpeedKmh, round1(rawSpeedKmh)),
@@ -91,11 +122,11 @@ object GpsRideCalculator {
         val candidateSpeed = sensorSpeedKmh ?: derivedSpeedKmh
         val cleanSpeed = when {
             candidateSpeed < MIN_MOVING_SPEED_KMH -> 0.0
-            candidateSpeed > MAX_PLAUSIBLE_BIKE_KMH -> current.currentSpeedKmh
+            candidateSpeed > mode.maxPlausibleKmh -> current.currentSpeedKmh
             else -> candidateSpeed
         }
 
-        val addedDist = if (cleanSpeed >= MIN_MOVING_SPEED_KMH && derivedSpeedKmh <= MAX_PLAUSIBLE_BIKE_KMH) {
+        val addedDist = if (cleanSpeed >= MIN_MOVING_SPEED_KMH && derivedSpeedKmh <= mode.maxPlausibleKmh) {
             segmentDist.roundToLong()
         } else {
             0L
@@ -109,8 +140,12 @@ object GpsRideCalculator {
             0.0
         }
 
-        val dtHours = dtMillis / 3_600_000.0
-        val addedKcal = cyclingMetForSpeed(cleanSpeed) * weightKg * dtHours * 1.05
+        val addedKcal = if (mode.trackCalories) {
+            val dtHours = dtMillis / 3_600_000.0
+            cyclingMetForSpeed(cleanSpeed) * weightKg * dtHours * 1.05
+        } else {
+            0.0
+        }
         val newCalories = current.caloriesKcal + addedKcal
 
         return current.copy(

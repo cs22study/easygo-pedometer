@@ -27,6 +27,15 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      - name: Decode persistent signing keystore if configured
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/easygo-release.jks"
+            echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/easygo-release.jks" >> "$GITHUB_ENV"
+          fi
+
       - name: Run core-calc JVM unit tests
         run: ./gradlew :core-calc:test --stacktrace
 
@@ -34,6 +43,10 @@ jobs:
         run: ./gradlew :app:testDebugUnitTest --stacktrace
 
       - name: Build Debug & Release APKs
+        env:
+          ANDROID_KEYSTORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASS }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASS: ${{ secrets.ANDROID_KEY_PASS }}
         run: ./gradlew :app:assembleDebug :app:assembleRelease --stacktrace
 
       - name: Prepare named APK artifacts (arm64, arm32, universal)
@@ -57,5 +70,5 @@ jobs:
         run: |
           gh release create "${GITHUB_REF_NAME}" dist/*.apk \
             --title "EasyGo-Pedometer ${GITHUB_REF_NAME}" \
-            --notes "包含 **arm64-v8a**（主流 64 位元手機）、**armeabi-v7a**（arm32 位元舊款手機）與 **universal**（通用版）三種 APK，已通過全部單元測試並經 R8 瘦身與 v1+v2 雙重簽章。" \
+            --notes "包含 **arm64-v8a**（主流 64 位元手機）、**armeabi-v7a**（arm32 位元舊款手機）與 **universal**（通用版）三種 APK。支援單車(60) / 汽車火車(150) / 高鐵(400) 三段時速上限切換與永久簽章設定。" \
             --prerelease
