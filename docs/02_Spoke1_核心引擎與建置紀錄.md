@@ -5,6 +5,7 @@
 - **JDK**：Microsoft Build of OpenJDK 17 (`17.0.21.102-hotspot`)，安裝於 `C:\Program Files\Microsoft\jdk-17.0.21.102-hotspot`
 - **Android SDK**：Android Command-Line Tools + `platform-tools` + `platforms;android-35` + `build-tools;35.0.0` (+ Gradle 自動補齊 `build-tools;34.0.0`)，位於 `%LOCALAPPDATA%\Android\Sdk`
 - **Gradle Wrapper**：Gradle `8.11.1` + Android Gradle Plugin `8.7.3` + Kotlin `2.0.21` + Compose BOM `2024.12.01` + Room `2.6.1`
+- **Android 相容規格**：`minSdk = 24`（支援 Android 7.0+，含 OPPO R11s Plus Android 7.1.1）、`targetSdk = 35`、啟用 `desugar_jdk_libs:2.1.3` 支援 `java.time.*`，並開啟 Debug v1 + v2 雙重簽章相容舊款 OEM 安裝器。
 
 ### Windows 中文路徑建置與測試說明
 由於專案資料夾路徑包含中文，JDK 17 在 Windows 繁體中文語系下啟動 Gradle `TestWorker` 時，原生 `@argfile` 解析會受系統預設編碼影響。本專案提供一鍵腳本 `scripts/gradle-win.ps1`，透過系統 `subst` 暫時映射純 ASCII 虛擬磁碟機執行測試與打包，完成後自動卸載，不影響原始資料夾結構：
