@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.cs22study.easygopedometer.calc.DaySummaryView
 import com.cs22study.easygopedometer.calc.DistanceUnit
 import com.cs22study.easygopedometer.calc.Gender
+import com.cs22study.easygopedometer.calc.GpsRideState
 import com.cs22study.easygopedometer.calc.HourlyCsvRecord
 import com.cs22study.easygopedometer.calc.PeriodAggregator
 import com.cs22study.easygopedometer.calc.PeriodSummaryView
@@ -14,6 +15,7 @@ import com.cs22study.easygopedometer.data.PowerMode
 import com.cs22study.easygopedometer.data.PreferencesRepository
 import com.cs22study.easygopedometer.data.db.AppDatabase
 import com.cs22study.easygopedometer.data.db.HourlyStepEntity
+import com.cs22study.easygopedometer.gps.GpsRideTracker
 import com.cs22study.easygopedometer.health.HealthConnectBridge
 import com.cs22study.easygopedometer.health.HealthSyncAvailability
 import com.cs22study.easygopedometer.service.CapturedScreenshot
@@ -56,12 +58,14 @@ data class HomeUiState(
     val deletedDates: List<String> = emptyList(),
     val statusBanner: String? = null,
     val capturedScreenshot: CapturedScreenshot? = null,
+    val gpsRideState: GpsRideState = GpsRideState(),
 )
 
 class PedometerViewModel(application: Application) : AndroidViewModel(application) {
 
     private val dao = AppDatabase.getInstance(application).pedometerDao()
     val prefsRepo = PreferencesRepository(application)
+    private val gpsTracker = GpsRideTracker(application)
 
     private val selectedTab = MutableStateFlow(HomeTab.DAY)
     private val selectedDate = MutableStateFlow(LocalDate.now())
@@ -76,6 +80,7 @@ class PedometerViewModel(application: Application) : AndroidViewModel(applicatio
             if (cleaned > 0) {
                 statusBanner.value = "已自動清除 $cleaned 筆異常感測跳躍紀錄（可於設定頁檢視）"
             }
+            backfillMissingActiveDurationForToday()
             healthTodaySteps.value = HealthConnectBridge.readTodaySteps(getApplication())
         }
         viewModelScope.launch {
@@ -88,6 +93,24 @@ class PedometerViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
+    private suspend fun backfillMissingActiveDurationForToday() {
+        val todayIso = LocalDate.now().toString()
+        val rows = dao.getRangeHourly(todayIso, todayIso)
+        val totalSteps = rows.sumOf { it.steps }
+        val totalSec = rows.sumOf { it.activeSeconds }
+        if (totalSteps > 100L && totalSec == 0L) {
+            val hcDuration = HealthConnectBridge.readTodayExerciseSeconds(getApplication())
+            val targetSec = if (hcDuration > 0L) hcDuration else (totalSteps * 10L) / 16L
+            val targetRow = rows.maxByOrNull { it.steps } ?: return
+            dao.upsertHourly(
+                targetRow.copy(
+                    activeSeconds = targetSec,
+                    updatedAtIso = OffsetDateTime.now().toString(),
+                )
+            )
+        }
+    }
+
     private val navFlow = combine(selectedTab, selectedDate, selectedMonth, selectedYear) { tab, date, month, year ->
         NavState(tab, date, month, year)
     }
@@ -97,8 +120,9 @@ class PedometerViewModel(application: Application) : AndroidViewModel(applicatio
         statusBanner,
         ScreenCaptureBus.latest,
         healthTodaySteps,
-    ) { deletedDates, banner, screenshot, hcSteps ->
-        MetaState(deletedDates, banner, screenshot, hcSteps)
+        gpsTracker.rideState,
+    ) { deletedDates, banner, screenshot, hcSteps, ride ->
+        MetaState(deletedDates, banner, screenshot, hcSteps, ride)
     }
 
     val uiState: StateFlow<HomeUiState> = combine(
@@ -161,6 +185,7 @@ class PedometerViewModel(application: Application) : AndroidViewModel(applicatio
             deletedDates = meta.deletedDates,
             statusBanner = meta.banner,
             capturedScreenshot = meta.screenshot,
+            gpsRideState = meta.rideState,
         )
     }.stateIn(
         scope = viewModelScope,
@@ -244,8 +269,11 @@ class PedometerViewModel(application: Application) : AndroidViewModel(applicatio
             withContext(Dispatchers.IO) {
                 val existingRows = dao.getRangeHourly(todayIso, todayIso)
                 val currentEasyGo = existingRows.sumOf { it.steps }
+                val currentSec = existingRows.sumOf { it.activeSeconds }
+                val hcSec = HealthConnectBridge.readTodayExerciseSeconds(getApplication())
                 if (hcSteps > currentEasyGo && hcSteps <= 150_000L) {
                     val diff = hcSteps - currentEasyGo
+                    val estDiffSec = if (hcSec > currentSec) (hcSec - currentSec) else (diff * 10L) / 16L
                     val hour = LocalTime.now().hour
                     val hourRow = dao.getHourly(todayIso, hour)
                     dao.upsertHourly(
@@ -253,7 +281,7 @@ class PedometerViewModel(application: Application) : AndroidViewModel(applicatio
                             dateIso = todayIso,
                             hour = hour,
                             steps = (hourRow?.steps ?: 0L) + diff,
-                            activeSeconds = hourRow?.activeSeconds ?: 0L,
+                            activeSeconds = (hourRow?.activeSeconds ?: 0L) + estDiffSec,
                             updatedAtIso = OffsetDateTime.now().toString(),
                             isDeleted = false,
                             deletedAtIso = "",
@@ -261,6 +289,7 @@ class PedometerViewModel(application: Application) : AndroidViewModel(applicatio
                     )
                     statusBanner.value = "已從 Health Connect 補齊今日步數（共 %,d 步）".format(hcSteps)
                 } else {
+                    backfillMissingActiveDurationForToday()
                     statusBanner.value = "本機今日步數已達 %,d 步（Health Connect 為 %,d 步）".format(currentEasyGo, hcSteps)
                 }
             }
@@ -280,6 +309,25 @@ class PedometerViewModel(application: Application) : AndroidViewModel(applicatio
             dao.restoreDay(dateIso)
             statusBanner.value = "已復原 $dateIso 計步紀錄"
         }
+    }
+
+    fun isGpsEnabled(): Boolean = gpsTracker.isGpsProviderEnabled()
+
+    fun startBikeRide() {
+        gpsTracker.startRide(prefsRepo.settings.value.profile.weightKg)
+    }
+
+    fun pauseBikeRide() {
+        gpsTracker.pauseRide()
+    }
+
+    fun resetBikeRide() {
+        gpsTracker.resetRide()
+    }
+
+    override fun onCleared() {
+        gpsTracker.stopUpdates()
+        super.onCleared()
     }
 
     fun dismissScreenshotPreview() {
@@ -338,6 +386,7 @@ class PedometerViewModel(application: Application) : AndroidViewModel(applicatio
         val banner: String?,
         val screenshot: CapturedScreenshot?,
         val healthTodaySteps: Long?,
+        val rideState: GpsRideState,
     )
 
     private fun HourlyStepEntity.toDomain() = HourlyCsvRecord(

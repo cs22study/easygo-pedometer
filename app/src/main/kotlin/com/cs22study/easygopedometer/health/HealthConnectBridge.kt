@@ -144,6 +144,23 @@ object HealthConnectBridge {
         return readTodayStepsInternal(client)
     }
 
+    suspend fun readTodayExerciseSeconds(context: Context): Long {
+        if (!hasAllPermissions(context)) return 0L
+        val client = HealthConnectClient.getOrCreate(context)
+        return runCatching {
+            val zone = ZoneId.systemDefault()
+            val startOfDay = LocalDate.now().atStartOfDay(zone).toInstant()
+            val now = java.time.Instant.now()
+            val resp = client.aggregate(
+                AggregateRequest(
+                    metrics = setOf(ExerciseSessionRecord.EXERCISE_DURATION_TOTAL),
+                    timeRangeFilter = TimeRangeFilter.between(startOfDay, now),
+                )
+            )
+            resp[ExerciseSessionRecord.EXERCISE_DURATION_TOTAL]?.seconds ?: 0L
+        }.getOrDefault(0L)
+    }
+
     private suspend fun readTodayStepsInternal(client: HealthConnectClient): Long? {
         return runCatching {
             val zone = ZoneId.systemDefault()

@@ -1,6 +1,7 @@
 package com.cs22study.easygopedometer.ui
 
 import android.net.Uri
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -8,7 +9,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -26,11 +26,12 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.SnackbarHost
@@ -47,7 +48,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -61,10 +61,10 @@ import com.cs22study.easygopedometer.calc.DistanceUnit
 import com.cs22study.easygopedometer.service.CapturedScreenshot
 import kotlinx.coroutines.delay
 
-private val TopNavNavy = Color(0xFF283D5B)
-private val TabIndicatorBlue = Color(0xFF5D9CE6)
-private val SkyBlueTop = Color(0xFF4D8AD6)
-private val SkyBlueBottom = Color(0xFF87B9EE)
+private val DarkBg = Color(0xFF0D1117)
+private val TopBarBg = Color(0xFF161B22)
+private val CardBg = Color(0xFF1C2128)
+private val CardBorder = Color(0xFF30363D)
 
 @Composable
 fun HomeScreen(
@@ -74,6 +74,7 @@ fun HomeScreen(
     onSelectTab: (HomeTab) -> Unit,
     onPrevious: () -> Unit,
     onNext: () -> Unit,
+    onOpenGpsSpeedometer: () -> Unit,
     onScreenshotClick: () -> Unit,
     onViewScreenshot: (Uri) -> Unit,
     onShareScreenshot: (Uri) -> Unit,
@@ -103,81 +104,104 @@ fun HomeScreen(
 
     val currentHeader: String
     val currentMetrics: CalculatedMetrics
+    val sparklineValues: List<Long>
+    val stepsCardTitle: String
     when (state.selectedTab) {
         HomeTab.DAY -> {
             currentHeader = state.daySummary?.headerText ?: ""
             currentMetrics = state.daySummary?.metrics ?: emptyMetrics()
+            stepsCardTitle = "今日步數"
+            val curve = state.daySummary?.hourlyCurve ?: emptyList()
+            sparklineValues = if (curve.size <= 1) {
+                listOf(currentMetrics.steps)
+            } else {
+                // Convert cumulative curve into per-2-hour buckets for mini trend bars
+                val hourly = curve.mapIndexed { idx, pt ->
+                    if (idx == 0) pt.cumulativeSteps else (pt.cumulativeSteps - curve[idx - 1].cumulativeSteps).coerceAtLeast(0L)
+                }
+                hourly.chunked(2).map { it.sum() }
+            }
         }
         HomeTab.WEEK -> {
             currentHeader = state.weekSummary?.headerText ?: ""
             currentMetrics = state.weekSummary?.metrics ?: emptyMetrics()
+            stepsCardTitle = "本週步數"
+            sparklineValues = state.weekSummary?.bars?.map { it.steps } ?: emptyList()
         }
         HomeTab.MONTH -> {
             currentHeader = state.monthSummary?.headerText ?: ""
             currentMetrics = state.monthSummary?.metrics ?: emptyMetrics()
+            stepsCardTitle = "本月步數"
+            sparklineValues = state.monthSummary?.bars?.map { it.steps }?.chunked(3)?.map { it.sum() } ?: emptyList()
         }
         HomeTab.YEAR -> {
             currentHeader = state.yearSummary?.headerText ?: ""
             currentMetrics = state.yearSummary?.metrics ?: emptyMetrics()
+            stepsCardTitle = "今年步數"
+            sparklineValues = state.yearSummary?.bars?.map { it.steps } ?: emptyList()
         }
+    }
+
+    val (distValue, distUnitText) = when (state.distanceUnit) {
+        DistanceUnit.METERS -> "%,d".format(currentMetrics.distanceMeters) to "公尺"
+        DistanceUnit.KILOMETERS -> "%.2f".format(currentMetrics.distanceMeters / 1000.0) to "公里"
     }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Brush.verticalGradient(listOf(SkyBlueTop, SkyBlueBottom))),
+            .background(DarkBg),
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
-            // Top dark navy tab bar matching reference screenshot
+            // Top dark navigation bar with 4 tabs + screenshot button + menu
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(TopNavNavy)
+                    .background(TopBarBg)
                     .statusBarsPadding()
-                    .height(52.dp),
+                    .height(54.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Row(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                Row(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .padding(horizontal = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
                     HomeTab.entries.forEach { tab ->
                         val selected = tab == state.selectedTab
                         Box(
                             modifier = Modifier
                                 .weight(1f)
-                                .fillMaxHeight()
-                                .clickable { onSelectTab(tab) },
+                                .padding(horizontal = 3.dp, vertical = 8.dp)
+                                .clip(RoundedCornerShape(18.dp))
+                                .background(if (selected) BrightYellow else CardBg)
+                                .clickable { onSelectTab(tab) }
+                                .padding(vertical = 6.dp),
                             contentAlignment = Alignment.Center,
                         ) {
                             Text(
                                 text = tab.label,
-                                color = if (selected) Color.White else Color.White.copy(alpha = 0.65f),
-                                fontSize = 17.sp,
-                                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                                color = if (selected) Color.Black else BrightYellow.copy(alpha = 0.85f),
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold,
                             )
-                            if (selected) {
-                                Box(
-                                    modifier = Modifier
-                                        .align(Alignment.BottomCenter)
-                                        .fillMaxWidth()
-                                        .height(3.dp)
-                                        .background(TabIndicatorBlue),
-                                )
-                            }
                         }
                     }
                 }
 
                 // One-click full-screen screenshot button
                 IconButton(onClick = onScreenshotClick) {
-                    CameraIcon(tint = Color.White)
+                    CameraIcon(tint = BrightYellow)
                 }
 
-                // Overflow menu
                 Box {
                     IconButton(onClick = { menuExpanded = true }) {
                         Icon(
                             imageVector = Icons.Default.MoreVert,
                             contentDescription = "選單",
-                            tint = Color.White,
+                            tint = BrightYellow,
                         )
                     }
                     DropdownMenu(
@@ -213,28 +237,31 @@ fun HomeScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState())
+                    .navigationBarsPadding()
                     .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 if (needsStepPermission) {
                     Surface(
-                        color = Color.White.copy(alpha = 0.22f),
-                        shape = RoundedCornerShape(8.dp),
+                        color = Color(0xFF2D2500),
+                        shape = RoundedCornerShape(10.dp),
+                        border = BorderStroke(1.dp, BrightYellow.copy(alpha = 0.6f)),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(bottom = 8.dp)
                             .clickable { onRequestPermissions() },
                     ) {
                         Text(
                             text = "點此授權計步感測與通知權限，確保背景持續累計",
-                            color = Color.White,
+                            color = BrightYellow,
                             fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
                             textAlign = TextAlign.Center,
                             modifier = Modifier.padding(vertical = 8.dp, horizontal = 12.dp),
                         )
                     }
                 }
 
-                // Date Header Row: ◀   2026年11月25日 週三   ▶
+                // Explicit Date & Weekday Header (Bold + Bright Yellow)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -242,94 +269,97 @@ fun HomeScreen(
                 ) {
                     Text(
                         text = "◀",
-                        color = Color.White.copy(alpha = 0.9f),
-                        fontSize = 18.sp,
+                        color = BrightYellow,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
                         modifier = Modifier
                             .clickable { onPrevious() }
-                            .padding(horizontal = 8.dp, vertical = 6.dp),
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
                     )
                     Text(
                         text = currentHeader,
-                        color = Color.White,
-                        fontSize = 21.sp,
-                        fontWeight = FontWeight.Medium,
+                        color = BrightYellow,
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Bold,
                     )
                     Text(
                         text = "▶",
-                        color = if (state.canGoNext) Color.White.copy(alpha = 0.9f) else Color.Transparent,
-                        fontSize = 18.sp,
+                        color = if (state.canGoNext) BrightYellow else Color.Transparent,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
                         modifier = Modifier
                             .then(if (state.canGoNext) Modifier.clickable { onNext() } else Modifier)
-                            .padding(horizontal = 8.dp, vertical = 6.dp),
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
                     )
                 }
 
-                HorizontalDivider(
-                    color = Color.White.copy(alpha = 0.45f),
-                    thickness = 1.dp,
-                    modifier = Modifier.padding(top = 6.dp, bottom = 14.dp),
+                // Card 1: 今日步數 (Bold Bright Yellow)
+                MetricTrendCard(
+                    title = stepsCardTitle,
+                    value = "%,d".format(currentMetrics.steps),
+                    unit = "步",
+                    icon = { FootprintIcon(tint = BrightYellow) },
+                    sparklineValues = sparklineValues,
+                    accentColor = BrightYellow,
+                    isHero = true,
                 )
 
-                // Hero Steps Row
-                Row(
+                // Card 2: 累計時間 (時:分:秒, Bold Bright Yellow)
+                MetricTrendCard(
+                    title = "累計時間",
+                    value = currentMetrics.formattedDuration,
+                    unit = "時:分:秒",
+                    icon = { StopwatchIcon(tint = BrightYellow) },
+                    sparklineValues = sparklineValues,
+                    accentColor = BrightYellow.copy(alpha = 0.85f),
+                )
+
+                // Card 3: 換算距離 (公尺, Bold Bright Yellow)
+                MetricTrendCard(
+                    title = "換算距離",
+                    value = distValue,
+                    unit = distUnitText,
+                    icon = { RulerIcon(tint = BrightYellow) },
+                    sparklineValues = sparklineValues,
+                    accentColor = BrightYellow.copy(alpha = 0.85f),
+                )
+
+                // Card 4: 燃燒熱量 (千卡, Bold Bright Yellow)
+                MetricTrendCard(
+                    title = "燃燒熱量",
+                    value = "%.1f".format(currentMetrics.caloriesKcal),
+                    unit = "千卡",
+                    icon = { FlameIcon(tint = BrightYellow) },
+                    sparklineValues = sparklineValues,
+                    accentColor = BrightYellow.copy(alpha = 0.85f),
+                )
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                // Cycling GPS Speedometer Entry Button in remaining space
+                Button(
+                    onClick = onOpenGpsSpeedometer,
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = CardBg,
+                        contentColor = BrightYellow,
+                    ),
+                    border = BorderStroke(1.5.dp, BrightYellow),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                        .height(62.dp),
                 ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            text = "步數",
-                            color = Color.White.copy(alpha = 0.95f),
-                            fontSize = 14.sp,
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        FootprintIcon()
-                    }
+                    BikeIcon(tint = BrightYellow)
+                    Spacer(modifier = Modifier.width(12.dp))
                     Text(
-                        text = "%,d".format(currentMetrics.steps),
-                        color = Color.White,
-                        fontSize = 54.sp,
-                        fontWeight = FontWeight.Light,
+                        text = "GPS 單車時速表",
+                        color = BrightYellow,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
                     )
                 }
 
-                Spacer(modifier = Modifier.height(14.dp))
-
-                // 2x2 Metrics Grid matching reference screenshot
-                MetricsGrid(metrics = currentMetrics, distanceUnit = state.distanceUnit)
-
-                Spacer(modifier = Modifier.height(18.dp))
-
-                // Chart section
-                when (state.selectedTab) {
-                    HomeTab.DAY -> {
-                        DayCumulativeLineChart(
-                            points = state.daySummary?.hourlyCurve ?: emptyList(),
-                        )
-                    }
-                    HomeTab.WEEK -> {
-                        PeriodBarChart(
-                            bars = state.weekSummary?.bars ?: emptyList(),
-                            defaultYMax = 12000L,
-                        )
-                    }
-                    HomeTab.MONTH -> {
-                        PeriodBarChart(
-                            bars = state.monthSummary?.bars ?: emptyList(),
-                            defaultYMax = 24000L,
-                        )
-                    }
-                    HomeTab.YEAR -> {
-                        PeriodBarChart(
-                            bars = state.yearSummary?.bars ?: emptyList(),
-                            defaultYMax = 240000L,
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(8.dp))
             }
         }
 
@@ -359,7 +389,74 @@ fun HomeScreen(
 }
 
 @Composable
-private fun ScreenshotPreviewCard(
+private fun MetricTrendCard(
+    title: String,
+    value: String,
+    unit: String,
+    icon: @Composable () -> Unit,
+    sparklineValues: List<Long>,
+    accentColor: Color,
+    isHero: Boolean = false,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = CardBg),
+        border = BorderStroke(1.dp, CardBorder),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = if (isHero) 16.dp else 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    icon()
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = title,
+                        color = BrightYellow,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+                Spacer(modifier = Modifier.height(6.dp))
+                Row(verticalAlignment = Alignment.Bottom) {
+                    Text(
+                        text = value,
+                        color = BrightYellow,
+                        fontSize = if (isHero) 36.sp else 28.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        softWrap = false,
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = unit,
+                        color = BrightYellow.copy(alpha = 0.88f),
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        softWrap = false,
+                        modifier = Modifier.padding(bottom = 3.dp),
+                    )
+                }
+            }
+
+            if (sparklineValues.isNotEmpty()) {
+                MiniSparklineBars(
+                    values = sparklineValues,
+                    accentColor = accentColor,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun ScreenshotPreviewCard(
     screenshot: CapturedScreenshot,
     onView: () -> Unit,
     onShare: () -> Unit,
@@ -390,119 +487,28 @@ private fun ScreenshotPreviewCard(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = "已儲存至相簿",
-                    color = Color.White,
+                    color = BrightYellow,
                     fontSize = 14.sp,
-                    fontWeight = FontWeight.SemiBold,
+                    fontWeight = FontWeight.Bold,
                 )
                 Text(
                     text = screenshot.fileName,
-                    color = Color.White.copy(alpha = 0.78f),
+                    color = Color.White.copy(alpha = 0.82f),
                     fontSize = 12.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
                 Row {
                     TextButton(onClick = onView) {
-                        Text("檢視", color = Color(0xFF93C5FD), fontSize = 13.sp)
+                        Text("檢視", color = BrightYellow, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                     }
                     TextButton(onClick = onShare) {
-                        Text("分享", color = Color(0xFF93C5FD), fontSize = 13.sp)
+                        Text("分享", color = BrightYellow, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
             IconButton(onClick = onDismiss) {
                 Icon(Icons.Default.Close, contentDescription = "關閉", tint = Color.White.copy(alpha = 0.8f))
-            }
-        }
-    }
-}
-
-@Composable
-private fun MetricsGrid(
-    metrics: CalculatedMetrics,
-    distanceUnit: DistanceUnit,
-) {
-    val (distValue, distLabel) = when (distanceUnit) {
-        DistanceUnit.METERS -> "%,d".format(metrics.distanceMeters) to "公尺"
-        DistanceUnit.KILOMETERS -> "%.2f".format(metrics.distanceMeters / 1000.0) to "公里"
-    }
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .border(1.dp, Color.White.copy(alpha = 0.78f))
-            .background(Color.White.copy(alpha = 0.08f)),
-    ) {
-        Row(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
-            MetricCell(
-                icon = { FlameIcon() },
-                value = "%.1f".format(metrics.caloriesKcal),
-                unit = "千卡",
-                modifier = Modifier.weight(1f),
-            )
-            Box(modifier = Modifier.width(1.dp).fillMaxHeight().background(Color.White.copy(alpha = 0.7f)))
-            MetricCell(
-                icon = { RulerIcon() },
-                value = distValue,
-                unit = distLabel,
-                modifier = Modifier.weight(1f),
-            )
-        }
-        HorizontalDivider(color = Color.White.copy(alpha = 0.7f), thickness = 1.dp)
-        Row(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
-            MetricCell(
-                icon = { StopwatchIcon() },
-                value = metrics.formattedDuration,
-                unit = "",
-                modifier = Modifier.weight(1f),
-            )
-            Box(modifier = Modifier.width(1.dp).fillMaxHeight().background(Color.White.copy(alpha = 0.7f)))
-            MetricCell(
-                icon = { SpeedometerIcon() },
-                value = "%.1f".format(metrics.avgSpeedKmh),
-                unit = "公里/時",
-                modifier = Modifier.weight(1f),
-            )
-        }
-    }
-}
-
-@Composable
-private fun MetricCell(
-    icon: @Composable () -> Unit,
-    value: String,
-    unit: String,
-    modifier: Modifier = Modifier,
-) {
-    val valueFontSize = if (value.length >= 7) 17.sp else 20.sp
-    Row(
-        modifier = modifier.padding(horizontal = 8.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        icon()
-        Spacer(modifier = Modifier.width(6.dp))
-        Row(
-            modifier = Modifier.weight(1f),
-            verticalAlignment = Alignment.Bottom,
-            horizontalArrangement = Arrangement.End,
-        ) {
-            Text(
-                text = value,
-                color = Color.White,
-                fontSize = valueFontSize,
-                fontWeight = FontWeight.Normal,
-                maxLines = 1,
-                softWrap = false,
-            )
-            if (unit.isNotEmpty()) {
-                Spacer(modifier = Modifier.width(3.dp))
-                Text(
-                    text = unit,
-                    color = Color.White.copy(alpha = 0.92f),
-                    fontSize = 11.sp,
-                    maxLines = 1,
-                    softWrap = false,
-                )
             }
         }
     }

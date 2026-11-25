@@ -10,10 +10,13 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -28,9 +31,17 @@ import com.cs22study.easygopedometer.health.HealthConnectBridge
 import com.cs22study.easygopedometer.health.HealthSyncAvailability
 import com.cs22study.easygopedometer.service.ScreenCaptureService
 import com.cs22study.easygopedometer.service.StepCounterService
+import com.cs22study.easygopedometer.ui.BrightYellow
+import com.cs22study.easygopedometer.ui.GpsSpeedometerScreen
 import com.cs22study.easygopedometer.ui.HomeScreen
 import com.cs22study.easygopedometer.ui.PedometerViewModel
 import com.cs22study.easygopedometer.ui.SettingsScreen
+
+private enum class AppRoute {
+    HOME,
+    SETTINGS,
+    GPS_SPEEDOMETER,
+}
 
 class MainActivity : ComponentActivity() {
 
@@ -43,15 +54,25 @@ class MainActivity : ComponentActivity() {
             val settings by vm.prefsRepo.settings.collectAsState()
             val context = LocalContext.current
 
-            var showSettings by remember { mutableStateOf(false) }
-            var needsPermission by remember { mutableStateOf(!hasRequiredStepPermissions()) }
+            var currentRoute by remember { mutableStateOf(AppRoute.HOME) }
+            var needsStepPermission by remember { mutableStateOf(!hasRequiredStepPermissions()) }
+            var hasLocationPermission by remember { mutableStateOf(checkLocationPermission()) }
 
             val permissionLauncher = rememberLauncherForActivityResult(
                 contract = ActivityResultContracts.RequestMultiplePermissions()
             ) {
-                needsPermission = !hasRequiredStepPermissions()
-                if (!needsPermission) {
+                needsStepPermission = !hasRequiredStepPermissions()
+                if (!needsStepPermission) {
                     StepCounterService.start(context)
+                }
+            }
+
+            val locationLauncher = rememberLauncherForActivityResult(
+                contract = ActivityResultContracts.RequestMultiplePermissions()
+            ) {
+                hasLocationPermission = checkLocationPermission()
+                if (hasLocationPermission) {
+                    vm.startBikeRide()
                 }
             }
 
@@ -77,6 +98,16 @@ class MainActivity : ComponentActivity() {
                 launchSystemScreenCapture()
             }
 
+            val triggerScreenshot: () -> Unit = {
+                if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P &&
+                    ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED
+                ) {
+                    storageForCaptureLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                } else {
+                    launchSystemScreenCapture()
+                }
+            }
+
             val healthPermissionLauncher = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                 rememberLauncherForActivityResult(
                     contract = PermissionController.createRequestPermissionResultContract()
@@ -99,62 +130,92 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            MaterialTheme {
-                if (showSettings) {
-                    SettingsScreen(
-                        settings = settings,
-                        healthAvailability = uiState.healthAvailability,
-                        healthTodaySteps = uiState.healthTodaySteps,
-                        deletedDates = uiState.deletedDates,
-                        selectedDateIso = uiState.selectedDate.toString(),
-                        onBack = { showSettings = false },
-                        onRequestHealthPermissions = {
-                            if (uiState.healthAvailability == HealthSyncAvailability.AVAILABLE && healthPermissionLauncher != null) {
-                                healthPermissionLauncher.launch(HealthConnectBridge.requiredPermissions)
-                            } else {
-                                vm.showBanner(HealthConnectBridge.availabilityDescription(uiState.healthAvailability))
-                            }
-                        },
-                        onSyncHealthNow = { vm.syncHealthConnectNow() },
-                        onImportHealthToday = { vm.importTodayFromHealthConnect() },
-                        onOpenGoogleFit = { HealthConnectBridge.openGoogleFitOrStore(context) },
-                        onExportCsv = { vm.exportCsvNow() },
-                        onSoftDeleteSelectedDay = { vm.softDeleteSelectedDay() },
-                        onRestoreDate = { vm.restoreDeletedDay(it) },
-                        onUpdateAge = vm::updateAge,
-                        onUpdateGender = vm::updateGender,
-                        onUpdateWeight = vm::updateWeight,
-                        onUpdateHeight = vm::updateHeight,
-                        onUpdateStride = vm::updateCustomStride,
-                        onUpdateDistanceUnit = vm::updateDistanceUnit,
-                        onUpdateWeekStart = vm::updateWeekStart,
-                        onUpdatePowerMode = vm::updatePowerMode,
-                    )
-                } else {
-                    HomeScreen(
-                        state = uiState,
-                        needsStepPermission = needsPermission,
-                        onRequestPermissions = { permissionLauncher.launch(requiredRuntimePermissions()) },
-                        onSelectTab = vm::selectTab,
-                        onPrevious = vm::goPrevious,
-                        onNext = vm::goNext,
-                        onScreenshotClick = {
-                            if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P &&
-                                ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED
-                            ) {
-                                storageForCaptureLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
-                            } else {
-                                launchSystemScreenCapture()
-                            }
-                        },
-                        onViewScreenshot = { uri -> openScreenshot(context, uri) },
-                        onShareScreenshot = { uri -> shareScreenshot(context, uri) },
-                        onDismissScreenshotPreview = vm::dismissScreenshotPreview,
-                        onExportCsv = vm::exportCsvNow,
-                        onSyncHealthConnect = vm::syncHealthConnectNow,
-                        onOpenSettings = { showSettings = true },
-                        onClearBanner = vm::clearBanner,
-                    )
+            BackHandler(enabled = currentRoute != AppRoute.HOME) {
+                currentRoute = AppRoute.HOME
+            }
+
+            MaterialTheme(
+                colorScheme = darkColorScheme(primary = BrightYellow)
+            ) {
+                when (currentRoute) {
+                    AppRoute.SETTINGS -> {
+                        MaterialTheme(colorScheme = lightColorScheme()) {
+                            SettingsScreen(
+                                settings = settings,
+                                healthAvailability = uiState.healthAvailability,
+                                healthTodaySteps = uiState.healthTodaySteps,
+                                deletedDates = uiState.deletedDates,
+                                selectedDateIso = uiState.selectedDate.toString(),
+                                onBack = { currentRoute = AppRoute.HOME },
+                                onRequestHealthPermissions = {
+                                    if (uiState.healthAvailability == HealthSyncAvailability.AVAILABLE && healthPermissionLauncher != null) {
+                                        healthPermissionLauncher.launch(HealthConnectBridge.requiredPermissions)
+                                    } else {
+                                        vm.showBanner(HealthConnectBridge.availabilityDescription(uiState.healthAvailability))
+                                    }
+                                },
+                                onSyncHealthNow = { vm.syncHealthConnectNow() },
+                                onImportHealthToday = { vm.importTodayFromHealthConnect() },
+                                onOpenGoogleFit = { HealthConnectBridge.openGoogleFitOrStore(context) },
+                                onExportCsv = { vm.exportCsvNow() },
+                                onSoftDeleteSelectedDay = { vm.softDeleteSelectedDay() },
+                                onRestoreDate = { vm.restoreDeletedDay(it) },
+                                onUpdateAge = vm::updateAge,
+                                onUpdateGender = vm::updateGender,
+                                onUpdateWeight = vm::updateWeight,
+                                onUpdateHeight = vm::updateHeight,
+                                onUpdateStride = vm::updateCustomStride,
+                                onUpdateDistanceUnit = vm::updateDistanceUnit,
+                                onUpdateWeekStart = vm::updateWeekStart,
+                                onUpdatePowerMode = vm::updatePowerMode,
+                            )
+                        }
+                    }
+
+                    AppRoute.GPS_SPEEDOMETER -> {
+                        GpsSpeedometerScreen(
+                            rideState = uiState.gpsRideState,
+                            hasLocationPermission = hasLocationPermission,
+                            isGpsEnabled = vm.isGpsEnabled(),
+                            capturedScreenshot = uiState.capturedScreenshot,
+                            onBack = { currentRoute = AppRoute.HOME },
+                            onRequestLocationPermission = {
+                                locationLauncher.launch(
+                                    arrayOf(
+                                        Manifest.permission.ACCESS_FINE_LOCATION,
+                                        Manifest.permission.ACCESS_COARSE_LOCATION,
+                                    )
+                                )
+                            },
+                            onStartRide = vm::startBikeRide,
+                            onPauseRide = vm::pauseBikeRide,
+                            onResetRide = vm::resetBikeRide,
+                            onScreenshotClick = triggerScreenshot,
+                            onViewScreenshot = { uri -> openScreenshot(context, uri) },
+                            onShareScreenshot = { uri -> shareScreenshot(context, uri) },
+                            onDismissScreenshotPreview = vm::dismissScreenshotPreview,
+                        )
+                    }
+
+                    AppRoute.HOME -> {
+                        HomeScreen(
+                            state = uiState,
+                            needsStepPermission = needsStepPermission,
+                            onRequestPermissions = { permissionLauncher.launch(requiredRuntimePermissions()) },
+                            onSelectTab = vm::selectTab,
+                            onPrevious = vm::goPrevious,
+                            onNext = vm::goNext,
+                            onOpenGpsSpeedometer = { currentRoute = AppRoute.GPS_SPEEDOMETER },
+                            onScreenshotClick = triggerScreenshot,
+                            onViewScreenshot = { uri -> openScreenshot(context, uri) },
+                            onShareScreenshot = { uri -> shareScreenshot(context, uri) },
+                            onDismissScreenshotPreview = vm::dismissScreenshotPreview,
+                            onExportCsv = vm::exportCsvNow,
+                            onSyncHealthConnect = vm::syncHealthConnectNow,
+                            onOpenSettings = { currentRoute = AppRoute.SETTINGS },
+                            onClearBanner = vm::clearBanner,
+                        )
+                    }
                 }
             }
         }
@@ -177,6 +238,11 @@ class MainActivity : ComponentActivity() {
         runCatching {
             context.startActivity(Intent.createChooser(intent, "分享截圖").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         }
+    }
+
+    private fun checkLocationPermission(): Boolean {
+        return ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) ==
+            PackageManager.PERMISSION_GRANTED
     }
 
     private fun requiredRuntimePermissions(): Array<String> {

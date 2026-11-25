@@ -2,11 +2,14 @@ package com.cs22study.easygopedometer.ui
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -15,234 +18,132 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.cs22study.easygopedometer.calc.BarItem
-import com.cs22study.easygopedometer.calc.HourlyPoint
-import kotlin.math.ceil
+import androidx.compose.ui.unit.sp
 import kotlin.math.cos
 import kotlin.math.sin
 
-private val ChartPlotBg = Color.White.copy(alpha = 0.22f)
-private val ChartGridLine = Color.White.copy(alpha = 0.28f)
-private val ChartLabelColor = android.graphics.Color.argb(210, 35, 62, 102)
+val BrightYellow = Color(0xFFFFD600)
 
-private fun computeNiceYMax(maxVal: Long, defaultMax: Long = 12000L): Long {
-    if (maxVal <= defaultMax) return defaultMax
-    val step = 4000L
-    return ((maxVal + step - 1) / step) * step
-}
-
+/**
+ * Compact bar sparkline inspired by dark trend cards (Images 3 & 4).
+ */
 @Composable
-fun DayCumulativeLineChart(
-    points: List<HourlyPoint>,
-    modifier: Modifier = Modifier,
+fun MiniSparklineBars(
+    values: List<Long>,
+    accentColor: Color = BrightYellow,
+    modifier: Modifier = Modifier.size(width = 108.dp, height = 38.dp),
 ) {
-    val maxData = points.maxOfOrNull { it.cumulativeSteps } ?: 0L
-    val yMax = computeNiceYMax(maxData, 12000L)
+    Canvas(modifier = modifier) {
+        val count = values.size.coerceAtLeast(1)
+        val maxVal = (values.maxOrNull() ?: 0L).coerceAtLeast(1L)
+        val slotW = size.width / count.toFloat()
+        val barW = (slotW * 0.56f).coerceAtLeast(2.dp.toPx())
+        val baseY = size.height
 
-    Box(modifier = modifier.fillMaxWidth().height(230.dp)) {
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            val leftPad = 56.dp.toPx()
-            val rightPad = 14.dp.toPx()
-            val topPad = 12.dp.toPx()
-            val bottomPad = 28.dp.toPx()
-
-            val plotW = (size.width - leftPad - rightPad).coerceAtLeast(1f)
-            val plotH = (size.height - topPad - bottomPad).coerceAtLeast(1f)
-
-            drawRect(
-                color = ChartPlotBg,
-                topLeft = Offset(leftPad, topPad),
-                size = Size(plotW, plotH),
-            )
-
-            val labelPaint = android.graphics.Paint().apply {
-                color = ChartLabelColor
-                textSize = 11.dp.toPx()
-                isAntiAlias = true
-                textAlign = android.graphics.Paint.Align.RIGHT
-            }
-
-            // 6 horizontal gridlines (0 .. yMax)
-            val levels = 6
-            for (i in 0..levels) {
-                val frac = i / levels.toFloat()
-                val y = topPad + plotH * (1f - frac)
-                drawLine(
-                    color = ChartGridLine,
-                    start = Offset(leftPad, y),
-                    end = Offset(leftPad + plotW, y),
-                    strokeWidth = 1.dp.toPx(),
+        values.forEachIndexed { idx, v ->
+            val cx = slotW * (idx + 0.5f)
+            if (v <= 0L) {
+                drawCircle(
+                    color = Color.White.copy(alpha = 0.25f),
+                    radius = 1.4.dp.toPx(),
+                    center = Offset(cx, baseY - 2.dp.toPx()),
                 )
-                if (i > 0) {
-                    val valLabel = ((yMax * i) / levels).toString()
-                    drawContext.canvas.nativeCanvas.drawText(
-                        valLabel,
-                        leftPad - 6.dp.toPx(),
-                        y + 4.dp.toPx(),
-                        labelPaint,
-                    )
-                }
-            }
-
-            // X-axis labels 2, 4, ..., 24
-            val xPaint = android.graphics.Paint().apply {
-                color = ChartLabelColor
-                textSize = 11.dp.toPx()
-                isAntiAlias = true
-                textAlign = android.graphics.Paint.Align.CENTER
-            }
-            for (h in 2..24 step 2) {
-                val x = leftPad + (h / 24f) * plotW
-                drawContext.canvas.nativeCanvas.drawText(
-                    h.toString(),
-                    x,
-                    topPad + plotH + 18.dp.toPx(),
-                    xPaint,
+            } else {
+                val h = (size.height * (v.toFloat() / maxVal.toFloat())).coerceIn(4.dp.toPx(), size.height)
+                drawRoundRect(
+                    color = accentColor,
+                    topLeft = Offset(cx - barW / 2f, baseY - h),
+                    size = Size(barW, h),
+                    cornerRadius = CornerRadius(2.dp.toPx()),
                 )
-            }
-
-            if (points.isEmpty()) return@Canvas
-
-            val linePath = Path()
-            val fillPath = Path()
-            val coords = points.map { pt ->
-                val x = leftPad + (pt.hour / 24f) * plotW
-                val y = topPad + plotH * (1f - (pt.cumulativeSteps.toFloat() / yMax.toFloat()).coerceIn(0f, 1f))
-                Offset(x, y)
-            }
-
-            coords.forEachIndexed { idx, offset ->
-                if (idx == 0) {
-                    linePath.moveTo(offset.x, offset.y)
-                    fillPath.moveTo(offset.x, topPad + plotH)
-                    fillPath.lineTo(offset.x, offset.y)
-                } else {
-                    linePath.lineTo(offset.x, offset.y)
-                    fillPath.lineTo(offset.x, offset.y)
-                }
-            }
-            val last = coords.last()
-            fillPath.lineTo(last.x, topPad + plotH)
-            fillPath.close()
-
-            drawPath(fillPath, color = Color.White.copy(alpha = 0.25f))
-            drawPath(
-                linePath,
-                color = Color.White,
-                style = Stroke(width = 2.5.dp.toPx(), cap = StrokeCap.Round),
-            )
-            coords.forEach { offset ->
-                drawCircle(color = Color.White, radius = 3.2.dp.toPx(), center = offset)
             }
         }
     }
 }
 
+/**
+ * Cycling speedometer arc gauge (0 - 60 km/h) with bright yellow bold center readout.
+ */
 @Composable
-fun PeriodBarChart(
-    bars: List<BarItem>,
-    defaultYMax: Long = 12000L,
-    modifier: Modifier = Modifier,
+fun SpeedometerGauge(
+    speedKmh: Double,
+    maxScaleKmh: Float = 60f,
+    modifier: Modifier = Modifier.size(230.dp),
 ) {
-    val maxData = bars.maxOfOrNull { it.steps } ?: 0L
-    val yMax = computeNiceYMax(maxData, defaultYMax)
-
-    Box(modifier = modifier.fillMaxWidth().height(230.dp)) {
+    val fraction = (speedKmh.toFloat() / maxScaleKmh).coerceIn(0f, 1f)
+    Box(modifier = modifier, contentAlignment = Alignment.Center) {
         Canvas(modifier = Modifier.fillMaxSize()) {
-            val leftPad = 56.dp.toPx()
-            val rightPad = 14.dp.toPx()
-            val topPad = 12.dp.toPx()
-            val bottomPad = 28.dp.toPx()
+            val strokeW = 14.dp.toPx()
+            val pad = strokeW / 2f + 8.dp.toPx()
+            val arcSize = Size(size.width - pad * 2, size.height - pad * 2)
+            val topLeft = Offset(pad, pad)
 
-            val plotW = (size.width - leftPad - rightPad).coerceAtLeast(1f)
-            val plotH = (size.height - topPad - bottomPad).coerceAtLeast(1f)
-
-            drawRect(
-                color = ChartPlotBg,
-                topLeft = Offset(leftPad, topPad),
-                size = Size(plotW, plotH),
+            // Track arc
+            drawArc(
+                color = Color(0xFF2D333B),
+                startAngle = 140f,
+                sweepAngle = 260f,
+                useCenter = false,
+                topLeft = topLeft,
+                size = arcSize,
+                style = Stroke(width = strokeW, cap = StrokeCap.Round),
             )
 
-            val labelPaint = android.graphics.Paint().apply {
-                color = ChartLabelColor
-                textSize = 11.dp.toPx()
-                isAntiAlias = true
-                textAlign = android.graphics.Paint.Align.RIGHT
-            }
-
-            val levels = 6
-            for (i in 0..levels) {
-                val frac = i / levels.toFloat()
-                val y = topPad + plotH * (1f - frac)
-                drawLine(
-                    color = ChartGridLine,
-                    start = Offset(leftPad, y),
-                    end = Offset(leftPad + plotW, y),
-                    strokeWidth = 1.dp.toPx(),
+            // Active speed arc
+            if (fraction > 0f) {
+                drawArc(
+                    color = BrightYellow,
+                    startAngle = 140f,
+                    sweepAngle = 260f * fraction,
+                    useCenter = false,
+                    topLeft = topLeft,
+                    size = arcSize,
+                    style = Stroke(width = strokeW, cap = StrokeCap.Round),
                 )
-                if (i > 0) {
-                    val valLabel = ((yMax * i) / levels).toString()
-                    drawContext.canvas.nativeCanvas.drawText(
-                        valLabel,
-                        leftPad - 6.dp.toPx(),
-                        y + 4.dp.toPx(),
-                        labelPaint,
-                    )
-                }
             }
 
-            if (bars.isEmpty()) return@Canvas
+            // Needle dot at arc tip
+            val angleDeg = 140f + 260f * fraction
+            val rad = Math.toRadians(angleDeg.toDouble())
+            val radius = arcSize.width / 2f
+            val cx = size.width / 2f + (radius * cos(rad)).toFloat()
+            val cy = size.height / 2f + (radius * sin(rad)).toFloat()
+            drawCircle(color = Color.White, radius = 6.dp.toPx(), center = Offset(cx, cy))
+        }
 
-            val slotW = plotW / bars.size.toFloat()
-            val barW = (slotW * 0.62f).coerceAtLeast(2.dp.toPx())
-            val xPaint = android.graphics.Paint().apply {
-                color = ChartLabelColor
-                textSize = if (bars.size == 12) 9.dp.toPx() else 10.5.dp.toPx()
-                isAntiAlias = true
-                textAlign = android.graphics.Paint.Align.CENTER
-            }
-
-            bars.forEachIndexed { idx, item ->
-                val cx = leftPad + slotW * (idx + 0.5f)
-                val barH = plotH * (item.steps.toFloat() / yMax.toFloat()).coerceIn(0f, 1f)
-                if (barH > 0f) {
-                    drawRect(
-                        color = Color.White.copy(alpha = 0.88f),
-                        topLeft = Offset(cx - barW / 2f, topPad + plotH - barH),
-                        size = Size(barW, barH),
-                    )
-                }
-                if (item.label.isNotBlank()) {
-                    drawContext.canvas.nativeCanvas.drawText(
-                        item.label,
-                        cx,
-                        topPad + plotH + 18.dp.toPx(),
-                        xPaint,
-                    )
-                }
-            }
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                text = "%.1f".format(speedKmh),
+                color = BrightYellow,
+                fontSize = 54.sp,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                text = "km/h",
+                color = BrightYellow.copy(alpha = 0.85f),
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+            )
         }
     }
 }
 
 @Composable
-fun FootprintIcon(modifier: Modifier = Modifier.size(36.dp), tint: Color = Color.White) {
+fun FootprintIcon(modifier: Modifier = Modifier.size(22.dp), tint: Color = BrightYellow) {
     Canvas(modifier = modifier) {
         val w = size.width
         val h = size.height
-        // Left sole
         drawOval(color = tint, topLeft = Offset(w * 0.14f, h * 0.12f), size = Size(w * 0.28f, h * 0.44f))
         drawOval(color = tint, topLeft = Offset(w * 0.18f, h * 0.58f), size = Size(w * 0.20f, h * 0.22f))
-        // Right sole (slightly offset lower)
         drawOval(color = tint, topLeft = Offset(w * 0.56f, h * 0.22f), size = Size(w * 0.28f, h * 0.44f))
         drawOval(color = tint, topLeft = Offset(w * 0.58f, h * 0.68f), size = Size(w * 0.20f, h * 0.22f))
     }
 }
 
 @Composable
-fun FlameIcon(modifier: Modifier = Modifier.size(22.dp), tint: Color = Color.White) {
+fun FlameIcon(modifier: Modifier = Modifier.size(22.dp), tint: Color = Color(0xFFFF9800)) {
     Canvas(modifier = modifier) {
         val w = size.width
         val h = size.height
@@ -259,7 +160,7 @@ fun FlameIcon(modifier: Modifier = Modifier.size(22.dp), tint: Color = Color.Whi
 }
 
 @Composable
-fun RulerIcon(modifier: Modifier = Modifier.size(22.dp), tint: Color = Color.White) {
+fun RulerIcon(modifier: Modifier = Modifier.size(22.dp), tint: Color = Color(0xFF60A5FA)) {
     Canvas(modifier = modifier) {
         val w = size.width
         val h = size.height
@@ -280,7 +181,7 @@ fun RulerIcon(modifier: Modifier = Modifier.size(22.dp), tint: Color = Color.Whi
 }
 
 @Composable
-fun StopwatchIcon(modifier: Modifier = Modifier.size(22.dp), tint: Color = Color.White) {
+fun StopwatchIcon(modifier: Modifier = Modifier.size(22.dp), tint: Color = Color(0xFF4ADE80)) {
     Canvas(modifier = modifier) {
         val w = size.width
         val h = size.height
@@ -293,31 +194,29 @@ fun StopwatchIcon(modifier: Modifier = Modifier.size(22.dp), tint: Color = Color
 }
 
 @Composable
-fun SpeedometerIcon(modifier: Modifier = Modifier.size(22.dp), tint: Color = Color.White) {
+fun BikeIcon(modifier: Modifier = Modifier.size(24.dp), tint: Color = BrightYellow) {
     Canvas(modifier = modifier) {
         val w = size.width
         val h = size.height
         val stroke = 2.dp.toPx()
-        drawArc(
-            color = tint,
-            startAngle = 150f,
-            sweepAngle = 240f,
-            useCenter = false,
-            topLeft = Offset(w * 0.12f, h * 0.18f),
-            size = Size(w * 0.76f, h * 0.76f),
-            style = Stroke(width = stroke, cap = StrokeCap.Round),
-        )
-        val angleRad = Math.toRadians(-45.0)
-        val cx = w * 0.5f
-        val cy = h * 0.58f
-        drawLine(
-            color = tint,
-            start = Offset(cx, cy),
-            end = Offset(cx + (w * 0.24f * cos(angleRad)).toFloat(), cy + (w * 0.24f * sin(angleRad)).toFloat()),
-            strokeWidth = stroke,
-            cap = StrokeCap.Round,
-        )
-        drawCircle(tint, radius = 2.2.dp.toPx(), center = Offset(cx, cy))
+        val wheelR = w * 0.17f
+        val leftWheel = Offset(w * 0.24f, h * 0.68f)
+        val rightWheel = Offset(w * 0.76f, h * 0.68f)
+        drawCircle(tint, radius = wheelR, center = leftWheel, style = Stroke(stroke))
+        drawCircle(tint, radius = wheelR, center = rightWheel, style = Stroke(stroke))
+        // Frame
+        val crank = Offset(w * 0.48f, h * 0.68f)
+        val seat = Offset(w * 0.42f, h * 0.38f)
+        val stem = Offset(w * 0.65f, h * 0.38f)
+        drawLine(tint, leftWheel, crank, strokeWidth = stroke)
+        drawLine(tint, leftWheel, seat, strokeWidth = stroke)
+        drawLine(tint, crank, seat, strokeWidth = stroke)
+        drawLine(tint, seat, stem, strokeWidth = stroke)
+        drawLine(tint, crank, stem, strokeWidth = stroke)
+        drawLine(tint, stem, rightWheel, strokeWidth = stroke)
+        // Handlebar & saddle
+        drawLine(tint, Offset(w * 0.36f, h * 0.36f), Offset(w * 0.48f, h * 0.36f), strokeWidth = stroke, cap = StrokeCap.Round)
+        drawLine(tint, Offset(w * 0.62f, h * 0.32f), Offset(w * 0.72f, h * 0.32f), strokeWidth = stroke, cap = StrokeCap.Round)
     }
 }
 
