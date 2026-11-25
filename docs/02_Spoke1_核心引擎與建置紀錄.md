@@ -29,7 +29,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\gradle-win.ps1 :core-calc:tes
 - `AndroidManifest.xml`：宣告計步與前景服務權限（未申請 `INTERNET` 權限，落實零資料外洩）
 - `data/db/Entities.kt`、`PedometerDao.kt`、`AppDatabase.kt`：Room SQLite 時段步數表（含軟刪除與復原 DAO）與感測器檢查點
 - `MainActivity.kt`：可啟動並顯示當日明確日期與星期之 Compose 啟動骨架
-- `.github/workflows/android-ci.yml`：GitHub Actions 自動化測試與 Debug APK 建置工作流
+- `.github/workflows/android-ci.yml`：GitHub Actions 自動化測試、Debug APK 建置，以及推送 `v*` Tag 時自動發布 GitHub Release（產出 `EasyGo-Pedometer-<tag>-debug.apk`）
 
 ---
 

@@ -3,8 +3,12 @@ name: Android CI
 on:
   push:
     branches: [ main ]
+    tags: [ 'v*' ]
   pull_request:
     branches: [ main ]
+
+permissions:
+  contents: write
 
 jobs:
   build-and-test:
@@ -32,8 +36,25 @@ jobs:
       - name: Build Debug APK
         run: ./gradlew :app:assembleDebug --stacktrace
 
+      - name: Prepare named APK artifact
+        run: |
+          TAG_OR_SHA="${GITHUB_REF_NAME}"
+          mkdir -p dist
+          cp app/build/outputs/apk/debug/app-debug.apk "dist/EasyGo-Pedometer-${TAG_OR_SHA}-debug.apk"
+
       - name: Upload Debug APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: easygo-pedometer-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
+          path: dist/*.apk
+
+      - name: Publish GitHub Release on tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          APK_FILE="dist/EasyGo-Pedometer-${GITHUB_REF_NAME}-debug.apk"
+          gh release create "${GITHUB_REF_NAME}" "${APK_FILE}" \
+            --title "EasyGo-Pedometer ${GITHUB_REF_NAME} (測試版 APK)" \
+            --notes "自動建置並通過全部單元測試（`:core-calc:test` 與 `:app:testDebugUnitTest`）。請下載下方 \`.apk\` 檔案於 Android 手機安裝測試。" \
+            --prerelease
