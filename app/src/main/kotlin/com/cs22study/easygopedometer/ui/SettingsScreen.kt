@@ -4,6 +4,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -46,16 +48,21 @@ import java.time.DayOfWeek
 private val SettingsBg = Color(0xFFF3F4F6)
 private val SectionHeaderColor = Color(0xFF6B7280)
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SettingsScreen(
     settings: AppSettings,
     healthAvailability: HealthSyncAvailability,
+    healthTodaySteps: Long?,
     deletedDates: List<String>,
+    selectedDateIso: String,
     onBack: () -> Unit,
     onRequestHealthPermissions: () -> Unit,
     onSyncHealthNow: () -> Unit,
+    onImportHealthToday: () -> Unit,
     onOpenGoogleFit: () -> Unit,
     onExportCsv: () -> Unit,
+    onSoftDeleteSelectedDay: () -> Unit,
     onRestoreDate: (String) -> Unit,
     onUpdateAge: (Int) -> Unit,
     onUpdateGender: (Gender) -> Unit,
@@ -110,6 +117,15 @@ fun SettingsScreen(
                     fontSize = 14.sp,
                     color = Color(0xFF1F2937),
                 )
+                if (healthTodaySteps != null) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Health Connect 今日總計：%,d 步".format(healthTodaySteps),
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = Color(0xFF2563EB),
+                    )
+                }
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = "同步狀態：${settings.lastHealthSyncMessage}",
@@ -117,13 +133,19 @@ fun SettingsScreen(
                     color = SectionHeaderColor,
                 )
                 Spacer(modifier = Modifier.height(10.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
                     if (healthAvailability == HealthSyncAvailability.AVAILABLE) {
                         Button(onClick = onRequestHealthPermissions) {
                             Text("授權同步")
                         }
                         OutlinedButton(onClick = onSyncHealthNow) {
-                            Text("立即同步")
+                            Text("寫入同步")
+                        }
+                        OutlinedButton(onClick = onImportHealthToday) {
+                            Text("讀取今日步數")
                         }
                     }
                     OutlinedButton(onClick = onOpenGoogleFit) {
@@ -199,8 +221,10 @@ fun SettingsScreen(
             }
             SettingsRow("步幅", strideText) { editDialog = "stride" }
 
-            SectionTitle("本機 CSV 備份與復原")
+            SectionTitle("本機 CSV 備份與紀錄管理")
             SettingsRow("匯出本機 CSV 紀錄檔", "立即儲存", onClick = onExportCsv)
+            HorizontalDivider(color = Color(0xFFF0F0F0))
+            SettingsRow("清除 $selectedDateIso 紀錄（軟刪除）", "移至復原清單", onClick = onSoftDeleteSelectedDay)
             if (deletedDates.isNotEmpty()) {
                 HorizontalDivider(color = Color(0xFFF0F0F0))
                 deletedDates.forEach { d ->

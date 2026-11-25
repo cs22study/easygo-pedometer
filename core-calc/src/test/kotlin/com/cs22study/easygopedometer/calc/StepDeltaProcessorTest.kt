@@ -16,6 +16,7 @@ class StepDeltaProcessorTest {
 
         assertTrue(result.deltas.isEmpty())
         assertFalse(result.rebootDetected)
+        assertTrue(result.baselineReanchored)
         assertEquals(12500L, result.nextCheckpoint.lastRawCounter)
         assertEquals(now, result.nextCheckpoint.lastEventTime)
     }
@@ -27,6 +28,7 @@ class StepDeltaProcessorTest {
         val result = StepDeltaProcessor.process(prev, 1850L, now)
 
         assertFalse(result.rebootDetected)
+        assertFalse(result.baselineReanchored)
         assertEquals(1, result.deltas.size)
         assertEquals(HourlyStepDelta(LocalDate.of(2026, 11, 25), 10, 850L), result.deltas[0])
     }
@@ -53,5 +55,32 @@ class StepDeltaProcessorTest {
         assertEquals(HourlyStepDelta(LocalDate.of(2026, 11, 25), 23, 500L), result.deltas[0])
         assertEquals(HourlyStepDelta(LocalDate.of(2026, 11, 26), 0, 500L), result.deltas[1])
         assertEquals(1000L, result.deltas.sumOf { it.deltaSteps })
+    }
+
+    @Test
+    fun `rejects Samsung cold-start 0 to 419064 jump and reanchors baseline`() {
+        val prev = SensorCheckpoint(0L, LocalDateTime.of(2026, 11, 25, 19, 36, 0))
+        val now = LocalDateTime.of(2026, 11, 25, 19, 36, 2)
+        val result = StepDeltaProcessor.process(prev, 419064L, now)
+
+        assertTrue(result.deltas.isEmpty())
+        assertTrue(result.baselineReanchored)
+        assertEquals(419064L, result.nextCheckpoint.lastRawCounter)
+
+        // Subsequent normal walking after reanchor counts properly
+        val next = StepDeltaProcessor.process(result.nextCheckpoint, 419089L, now.plusSeconds(15))
+        assertEquals(1, next.deltas.size)
+        assertEquals(25L, next.deltas[0].deltaSteps)
+    }
+
+    @Test
+    fun `rejects physically impossible burst exceeding 5 steps per second`() {
+        val prev = SensorCheckpoint(5000L, LocalDateTime.of(2026, 11, 25, 19, 0, 0))
+        val now = LocalDateTime.of(2026, 11, 25, 19, 0, 5)
+        val result = StepDeltaProcessor.process(prev, 55000L, now)
+
+        assertTrue(result.deltas.isEmpty())
+        assertTrue(result.baselineReanchored)
+        assertEquals(55000L, result.nextCheckpoint.lastRawCounter)
     }
 }

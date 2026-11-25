@@ -1,6 +1,7 @@
 package com.cs22study.easygopedometer.calc
 
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
 class ActiveTimeTrackerTest {
@@ -25,6 +26,13 @@ class ActiveTimeTrackerTest {
         val next = tracker.recordSteps(4L, 106L)
         assertEquals(3L, next)
         assertEquals(6L, tracker.activeSeconds)
+    }
+
+    @Test
+    fun `single batch spike never injects hours of active time`() {
+        val tracker = ActiveTimeTracker(maxActiveGapSeconds = 10L, minBurstSteps = 3L)
+        val added = tracker.recordSteps(5000L, 1000L)
+        assertTrue(added <= 60L, "Expected capped burst <= 60s, got $added")
     }
 
     @Test

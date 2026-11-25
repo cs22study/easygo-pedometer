@@ -3,6 +3,7 @@ package com.cs22study.easygopedometer.calc
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.temporal.ChronoUnit
+import kotlin.math.max
 
 /**
  * Persisted checkpoint of the hardware TYPE_STEP_COUNTER sensor.
@@ -30,20 +31,23 @@ data class StepProcessResult(
     val deltas: List<HourlyStepDelta>,
     val nextCheckpoint: SensorCheckpoint,
     val rebootDetected: Boolean,
+    val baselineReanchored: Boolean = false,
 )
 
 /**
  * Processes cumulative hardware step counter readings (which reset to 0 on device reboot)
  * into non-negative hourly step deltas, splitting across midnight boundaries if needed.
+ *
+ * Includes physical plausibility and cold-start `0 -> lifetime_steps` guards so sensor-hub
+ * resyncs (e.g. Samsung Galaxy devices emitting 0 before sending 400k+ boot steps) never pollute daily stats.
  */
 object StepDeltaProcessor {
 
+    private const val MAX_STEPS_PER_SECOND = 5L
+    private const val BURST_ALLOWANCE_STEPS = 250L
+
     /**
      * Computes step deltas between [previous] checkpoint and [currentRawCounter] observed at [currentTime].
-     *
-     * When [previous] is null (first initialization), records the baseline without inventing past steps.
-     * When [currentRawCounter] < [previous.lastRawCounter], assumes device reboot and treats [currentRawCounter]
-     * as steps taken since reboot.
      */
     fun process(
         previous: SensorCheckpoint?,
@@ -52,11 +56,14 @@ object StepDeltaProcessor {
     ): StepProcessResult {
         require(currentRawCounter >= 0L) { "Raw counter cannot be negative" }
 
+        // Do not treat an initial 0 reading as a committed baseline if sensor hub hasn't warmed up yet,
+        // or establish baseline directly when non-zero.
         if (previous == null) {
             return StepProcessResult(
                 deltas = emptyList(),
                 nextCheckpoint = SensorCheckpoint(currentRawCounter, currentTime),
                 rebootDetected = false,
+                baselineReanchored = true,
             )
         }
 
@@ -66,6 +73,7 @@ object StepDeltaProcessor {
             currentTime
         }
 
+        val elapsedSeconds = ChronoUnit.SECONDS.between(previous.lastEventTime, effectiveTime).coerceAtLeast(1L)
         val rebootDetected = currentRawCounter < previous.lastRawCounter
         val totalDelta = if (rebootDetected) {
             currentRawCounter
@@ -78,6 +86,18 @@ object StepDeltaProcessor {
                 deltas = emptyList(),
                 nextCheckpoint = SensorCheckpoint(currentRawCounter, effectiveTime),
                 rebootDetected = rebootDetected,
+            )
+        }
+
+        // Guard against OEM sensor cold-start (`0 -> 419064` in seconds) or impossible jumps (> 5 steps/sec sustained).
+        val maxPlausibleDelta = max(BURST_ALLOWANCE_STEPS, elapsedSeconds * MAX_STEPS_PER_SECOND + BURST_ALLOWANCE_STEPS)
+        val coldStartZeroJump = previous.lastRawCounter == 0L && currentRawCounter > BURST_ALLOWANCE_STEPS
+        if (coldStartZeroJump || totalDelta > maxPlausibleDelta) {
+            return StepProcessResult(
+                deltas = emptyList(),
+                nextCheckpoint = SensorCheckpoint(currentRawCounter, effectiveTime),
+                rebootDetected = rebootDetected,
+                baselineReanchored = true,
             )
         }
 
@@ -101,10 +121,6 @@ object StepDeltaProcessor {
         )
     }
 
-    /**
-     * Proportionally allocates steps across day boundaries when a device wakes up after midnight.
-     * Ensures the sum of all allocated buckets equals [totalDelta] exactly.
-     */
     private fun splitAcrossMidnight(
         startTime: LocalDateTime,
         endTime: LocalDateTime,
@@ -115,7 +131,6 @@ object StepDeltaProcessor {
             return listOf(HourlyStepDelta(endTime.toLocalDate(), endTime.hour, totalDelta))
         }
 
-        // Split proportionally between the previous day's last active hour and the new day's current hour.
         val firstMidnight = startTime.toLocalDate().plusDays(1).atStartOfDay()
         val secondsBeforeMidnight = ChronoUnit.SECONDS.between(startTime, firstMidnight).coerceIn(0L, totalSeconds)
         val beforeSteps = (totalDelta * secondsBeforeMidnight) / totalSeconds

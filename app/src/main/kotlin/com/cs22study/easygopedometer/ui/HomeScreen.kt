@@ -1,5 +1,7 @@
 package com.cs22study.easygopedometer.ui
 
+import android.net.Uri
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -13,14 +15,19 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
@@ -30,6 +37,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -38,14 +46,20 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.cs22study.easygopedometer.calc.CalculatedMetrics
 import com.cs22study.easygopedometer.calc.DistanceUnit
+import com.cs22study.easygopedometer.service.CapturedScreenshot
+import kotlinx.coroutines.delay
 
 private val TopNavNavy = Color(0xFF283D5B)
 private val TabIndicatorBlue = Color(0xFF5D9CE6)
@@ -61,6 +75,9 @@ fun HomeScreen(
     onPrevious: () -> Unit,
     onNext: () -> Unit,
     onScreenshotClick: () -> Unit,
+    onViewScreenshot: (Uri) -> Unit,
+    onShareScreenshot: (Uri) -> Unit,
+    onDismissScreenshotPreview: () -> Unit,
     onExportCsv: () -> Unit,
     onSyncHealthConnect: () -> Unit,
     onOpenSettings: () -> Unit,
@@ -74,6 +91,13 @@ fun HomeScreen(
         if (msg != null) {
             snackbarHostState.showSnackbar(msg)
             onClearBanner()
+        }
+    }
+
+    LaunchedEffect(state.capturedScreenshot?.capturedAtMillis) {
+        if (state.capturedScreenshot != null) {
+            delay(8000L)
+            onDismissScreenshotPreview()
         }
     }
 
@@ -142,7 +166,7 @@ fun HomeScreen(
                     }
                 }
 
-                // Home screen screenshot button
+                // One-click full-screen screenshot button
                 IconButton(onClick = onScreenshotClick) {
                     CameraIcon(tint = Color.White)
                 }
@@ -168,7 +192,7 @@ fun HomeScreen(
                             },
                         )
                         DropdownMenuItem(
-                            text = { Text("同步至 Google Fit / Health Connect") },
+                            text = { Text("同步 Google Fit / Health Connect") },
                             onClick = {
                                 menuExpanded = false
                                 onSyncHealthConnect()
@@ -309,10 +333,87 @@ fun HomeScreen(
             }
         }
 
+        // Bottom Screenshot Preview Card
+        val shot = state.capturedScreenshot
+        if (shot != null) {
+            ScreenshotPreviewCard(
+                screenshot = shot,
+                onView = { onViewScreenshot(shot.uri) },
+                onShare = { onShareScreenshot(shot.uri) },
+                onDismiss = onDismissScreenshotPreview,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .navigationBarsPadding()
+                    .padding(12.dp),
+            )
+        }
+
         SnackbarHost(
             hostState = snackbarHostState,
-            modifier = Modifier.align(Alignment.BottomCenter).padding(12.dp),
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .navigationBarsPadding()
+                .padding(12.dp),
         )
+    }
+}
+
+@Composable
+private fun ScreenshotPreviewCard(
+    screenshot: CapturedScreenshot,
+    onView: () -> Unit,
+    onShare: () -> Unit,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1F2937).copy(alpha = 0.96f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
+    ) {
+        Row(
+            modifier = Modifier.padding(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Image(
+                bitmap = screenshot.thumbnail.asImageBitmap(),
+                contentDescription = "截圖預覽",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .size(width = 48.dp, height = 76.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .border(1.dp, Color.White.copy(alpha = 0.4f), RoundedCornerShape(6.dp))
+                    .clickable { onView() },
+            )
+            Spacer(modifier = Modifier.width(10.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "已儲存至相簿",
+                    color = Color.White,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    text = screenshot.fileName,
+                    color = Color.White.copy(alpha = 0.78f),
+                    fontSize = 12.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Row {
+                    TextButton(onClick = onView) {
+                        Text("檢視", color = Color(0xFF93C5FD), fontSize = 13.sp)
+                    }
+                    TextButton(onClick = onShare) {
+                        Text("分享", color = Color(0xFF93C5FD), fontSize = 13.sp)
+                    }
+                }
+            }
+            IconButton(onClick = onDismiss) {
+                Icon(Icons.Default.Close, contentDescription = "關閉", tint = Color.White.copy(alpha = 0.8f))
+            }
+        }
     }
 }
 
@@ -373,25 +474,36 @@ private fun MetricCell(
     unit: String,
     modifier: Modifier = Modifier,
 ) {
+    val valueFontSize = if (value.length >= 7) 17.sp else 20.sp
     Row(
-        modifier = modifier.padding(horizontal = 10.dp, vertical = 10.dp),
+        modifier = modifier.padding(horizontal = 8.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         icon()
-        Spacer(modifier = Modifier.weight(1f))
-        Text(
-            text = value,
-            color = Color.White,
-            fontSize = 21.sp,
-            fontWeight = FontWeight.Normal,
-        )
-        if (unit.isNotEmpty()) {
-            Spacer(modifier = Modifier.width(4.dp))
+        Spacer(modifier = Modifier.width(6.dp))
+        Row(
+            modifier = Modifier.weight(1f),
+            verticalAlignment = Alignment.Bottom,
+            horizontalArrangement = Arrangement.End,
+        ) {
             Text(
-                text = unit,
-                color = Color.White.copy(alpha = 0.92f),
-                fontSize = 12.sp,
+                text = value,
+                color = Color.White,
+                fontSize = valueFontSize,
+                fontWeight = FontWeight.Normal,
+                maxLines = 1,
+                softWrap = false,
             )
+            if (unit.isNotEmpty()) {
+                Spacer(modifier = Modifier.width(3.dp))
+                Text(
+                    text = unit,
+                    color = Color.White.copy(alpha = 0.92f),
+                    fontSize = 11.sp,
+                    maxLines = 1,
+                    softWrap = false,
+                )
+            }
         }
     }
 }

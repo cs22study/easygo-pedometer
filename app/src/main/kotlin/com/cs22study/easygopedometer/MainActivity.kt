@@ -1,7 +1,12 @@
 package com.cs22study.easygopedometer
 
 import android.Manifest
+import android.app.Activity
+import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.projection.MediaProjectionManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -21,6 +26,7 @@ import androidx.health.connect.client.PermissionController
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.cs22study.easygopedometer.health.HealthConnectBridge
 import com.cs22study.easygopedometer.health.HealthSyncAvailability
+import com.cs22study.easygopedometer.service.ScreenCaptureService
 import com.cs22study.easygopedometer.service.StepCounterService
 import com.cs22study.easygopedometer.ui.HomeScreen
 import com.cs22study.easygopedometer.ui.PedometerViewModel
@@ -47,6 +53,28 @@ class MainActivity : ComponentActivity() {
                 if (!needsPermission) {
                     StepCounterService.start(context)
                 }
+            }
+
+            val screenCaptureLauncher = rememberLauncherForActivityResult(
+                contract = ActivityResultContracts.StartActivityForResult()
+            ) { result ->
+                val data = result.data
+                if (result.resultCode == Activity.RESULT_OK && data != null) {
+                    ScreenCaptureService.startCapture(context, result.resultCode, data)
+                } else {
+                    vm.showBanner("已取消螢幕截圖")
+                }
+            }
+
+            val launchSystemScreenCapture: () -> Unit = {
+                val mgr = context.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+                screenCaptureLauncher.launch(mgr.createScreenCaptureIntent())
+            }
+
+            val storageForCaptureLauncher = rememberLauncherForActivityResult(
+                contract = ActivityResultContracts.RequestPermission()
+            ) {
+                launchSystemScreenCapture()
             }
 
             val healthPermissionLauncher = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
@@ -76,7 +104,9 @@ class MainActivity : ComponentActivity() {
                     SettingsScreen(
                         settings = settings,
                         healthAvailability = uiState.healthAvailability,
+                        healthTodaySteps = uiState.healthTodaySteps,
                         deletedDates = uiState.deletedDates,
+                        selectedDateIso = uiState.selectedDate.toString(),
                         onBack = { showSettings = false },
                         onRequestHealthPermissions = {
                             if (uiState.healthAvailability == HealthSyncAvailability.AVAILABLE && healthPermissionLauncher != null) {
@@ -86,8 +116,10 @@ class MainActivity : ComponentActivity() {
                             }
                         },
                         onSyncHealthNow = { vm.syncHealthConnectNow() },
+                        onImportHealthToday = { vm.importTodayFromHealthConnect() },
                         onOpenGoogleFit = { HealthConnectBridge.openGoogleFitOrStore(context) },
                         onExportCsv = { vm.exportCsvNow() },
+                        onSoftDeleteSelectedDay = { vm.softDeleteSelectedDay() },
                         onRestoreDate = { vm.restoreDeletedDay(it) },
                         onUpdateAge = vm::updateAge,
                         onUpdateGender = vm::updateGender,
@@ -107,8 +139,17 @@ class MainActivity : ComponentActivity() {
                         onPrevious = vm::goPrevious,
                         onNext = vm::goNext,
                         onScreenshotClick = {
-                            vm.showBanner("請同時按手機電源鍵＋音量下鍵截取含上方狀態列之完整畫面（一鍵自動截圖將於下階段串接）")
+                            if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P &&
+                                ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED
+                            ) {
+                                storageForCaptureLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                            } else {
+                                launchSystemScreenCapture()
+                            }
                         },
+                        onViewScreenshot = { uri -> openScreenshot(context, uri) },
+                        onShareScreenshot = { uri -> shareScreenshot(context, uri) },
+                        onDismissScreenshotPreview = vm::dismissScreenshotPreview,
                         onExportCsv = vm::exportCsvNow,
                         onSyncHealthConnect = vm::syncHealthConnectNow,
                         onOpenSettings = { showSettings = true },
@@ -116,6 +157,25 @@ class MainActivity : ComponentActivity() {
                     )
                 }
             }
+        }
+    }
+
+    private fun openScreenshot(context: Context, uri: Uri) {
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, "image/png")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        runCatching { context.startActivity(intent) }
+    }
+
+    private fun shareScreenshot(context: Context, uri: Uri) {
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "image/png"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        runCatching {
+            context.startActivity(Intent.createChooser(intent, "分享截圖").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         }
     }
 

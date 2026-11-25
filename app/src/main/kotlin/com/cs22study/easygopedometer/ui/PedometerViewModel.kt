@@ -16,6 +16,8 @@ import com.cs22study.easygopedometer.data.db.AppDatabase
 import com.cs22study.easygopedometer.data.db.HourlyStepEntity
 import com.cs22study.easygopedometer.health.HealthConnectBridge
 import com.cs22study.easygopedometer.health.HealthSyncAvailability
+import com.cs22study.easygopedometer.service.CapturedScreenshot
+import com.cs22study.easygopedometer.service.ScreenCaptureBus
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -50,8 +52,10 @@ data class HomeUiState(
     val canGoNext: Boolean = false,
     val healthAvailability: HealthSyncAvailability = HealthSyncAvailability.UNSUPPORTED_OS,
     val healthStatusMessage: String = "",
+    val healthTodaySteps: Long? = null,
     val deletedDates: List<String> = emptyList(),
     val statusBanner: String? = null,
+    val capturedScreenshot: CapturedScreenshot? = null,
 )
 
 class PedometerViewModel(application: Application) : AndroidViewModel(application) {
@@ -64,18 +68,45 @@ class PedometerViewModel(application: Application) : AndroidViewModel(applicatio
     private val selectedMonth = MutableStateFlow(YearMonth.now())
     private val selectedYear = MutableStateFlow(LocalDate.now().year)
     private val statusBanner = MutableStateFlow<String?>(null)
+    private val healthTodaySteps = MutableStateFlow<Long?>(null)
+
+    init {
+        viewModelScope.launch(Dispatchers.IO) {
+            val cleaned = dao.softDeleteImpossibleSpikes(OffsetDateTime.now().toString())
+            if (cleaned > 0) {
+                statusBanner.value = "已自動清除 $cleaned 筆異常感測跳躍紀錄（可於設定頁檢視）"
+            }
+            healthTodaySteps.value = HealthConnectBridge.readTodaySteps(getApplication())
+        }
+        viewModelScope.launch {
+            ScreenCaptureBus.error.collect { err ->
+                if (err != null) {
+                    statusBanner.value = err
+                    ScreenCaptureBus.clearError()
+                }
+            }
+        }
+    }
 
     private val navFlow = combine(selectedTab, selectedDate, selectedMonth, selectedYear) { tab, date, month, year ->
         NavState(tab, date, month, year)
     }
 
+    private val metaFlow = combine(
+        dao.observeDeletedDates(),
+        statusBanner,
+        ScreenCaptureBus.latest,
+        healthTodaySteps,
+    ) { deletedDates, banner, screenshot, hcSteps ->
+        MetaState(deletedDates, banner, screenshot, hcSteps)
+    }
+
     val uiState: StateFlow<HomeUiState> = combine(
         dao.observeAllActive(),
-        dao.observeDeletedDates(),
         prefsRepo.settings,
         navFlow,
-        statusBanner,
-    ) { entities, deletedDates, settings, nav, banner ->
+        metaFlow,
+    ) { entities, settings, nav, meta ->
         val records = entities.map { it.toDomain() }
         val today = LocalDate.now()
         val maxHour = if (nav.date == today) LocalTime.now().hour else 23
@@ -105,8 +136,8 @@ class PedometerViewModel(application: Application) : AndroidViewModel(applicatio
 
         val canNext = when (nav.tab) {
             HomeTab.DAY -> nav.date.isBefore(today)
-            HomeTab.WEEK -> nav.date.plusWeeks(1).let { !it.isAfter(today.plusDays(6)) } &&
-                com.cs22study.easygopedometer.calc.DateDisplayFormatter.weekBounds(nav.date, settings.weekStart).second.isBefore(today)
+            HomeTab.WEEK -> com.cs22study.easygopedometer.calc.DateDisplayFormatter
+                .weekBounds(nav.date, settings.weekStart).second.isBefore(today)
             HomeTab.MONTH -> nav.month.isBefore(YearMonth.now())
             HomeTab.YEAR -> nav.year < today.year
         }
@@ -126,8 +157,10 @@ class PedometerViewModel(application: Application) : AndroidViewModel(applicatio
             canGoNext = canNext,
             healthAvailability = hcAvail,
             healthStatusMessage = settings.lastHealthSyncMessage,
-            deletedDates = deletedDates,
-            statusBanner = banner,
+            healthTodaySteps = meta.healthTodaySteps,
+            deletedDates = meta.deletedDates,
+            statusBanner = meta.banner,
+            capturedScreenshot = meta.screenshot,
         )
     }.stateIn(
         scope = viewModelScope,
@@ -185,19 +218,60 @@ class PedometerViewModel(application: Application) : AndroidViewModel(applicatio
     fun syncHealthConnectNow() {
         viewModelScope.launch {
             val res = withContext(Dispatchers.IO) {
+                dao.softDeleteImpossibleSpikes(OffsetDateTime.now().toString())
                 val all = dao.getAllIncludingDeleted()
-                HealthConnectBridge.syncHourlyRecords(getApplication(), all)
+                val syncResult = HealthConnectBridge.syncHourlyRecords(getApplication(), all)
+                healthTodaySteps.value = HealthConnectBridge.readTodaySteps(getApplication())
+                syncResult
             }
             prefsRepo.update { it.copy(lastHealthSyncMessage = res.message) }
             statusBanner.value = res.message
         }
     }
 
-    fun softDeleteCurrentDay() {
+    fun importTodayFromHealthConnect() {
+        viewModelScope.launch {
+            val hcSteps = withContext(Dispatchers.IO) {
+                HealthConnectBridge.readTodaySteps(getApplication())
+            }
+            healthTodaySteps.value = hcSteps
+            if (hcSteps == null) {
+                statusBanner.value = "尚未授權讀取 Health Connect，請先點擊「授權同步」"
+                return@launch
+            }
+            val today = LocalDate.now()
+            val todayIso = today.toString()
+            withContext(Dispatchers.IO) {
+                val existingRows = dao.getRangeHourly(todayIso, todayIso)
+                val currentEasyGo = existingRows.sumOf { it.steps }
+                if (hcSteps > currentEasyGo && hcSteps <= 150_000L) {
+                    val diff = hcSteps - currentEasyGo
+                    val hour = LocalTime.now().hour
+                    val hourRow = dao.getHourly(todayIso, hour)
+                    dao.upsertHourly(
+                        HourlyStepEntity(
+                            dateIso = todayIso,
+                            hour = hour,
+                            steps = (hourRow?.steps ?: 0L) + diff,
+                            activeSeconds = hourRow?.activeSeconds ?: 0L,
+                            updatedAtIso = OffsetDateTime.now().toString(),
+                            isDeleted = false,
+                            deletedAtIso = "",
+                        )
+                    )
+                    statusBanner.value = "已從 Health Connect 補齊今日步數（共 %,d 步）".format(hcSteps)
+                } else {
+                    statusBanner.value = "本機今日步數已達 %,d 步（Health Connect 為 %,d 步）".format(currentEasyGo, hcSteps)
+                }
+            }
+        }
+    }
+
+    fun softDeleteSelectedDay() {
         val targetDate = selectedDate.value.toString()
         viewModelScope.launch(Dispatchers.IO) {
             dao.softDeleteDay(targetDate, OffsetDateTime.now().toString())
-            statusBanner.value = "已軟刪除 $targetDate 紀錄（可於設定頁復原）"
+            statusBanner.value = "已軟刪除 $targetDate 紀錄（可於下方清單一鍵復原）"
         }
     }
 
@@ -206,6 +280,10 @@ class PedometerViewModel(application: Application) : AndroidViewModel(applicatio
             dao.restoreDay(dateIso)
             statusBanner.value = "已復原 $dateIso 計步紀錄"
         }
+    }
+
+    fun dismissScreenshotPreview() {
+        ScreenCaptureBus.clearPreview()
     }
 
     fun showBanner(msg: String) {
@@ -253,6 +331,13 @@ class PedometerViewModel(application: Application) : AndroidViewModel(applicatio
         val date: LocalDate,
         val month: YearMonth,
         val year: Int,
+    )
+
+    private data class MetaState(
+        val deletedDates: List<String>,
+        val banner: String?,
+        val screenshot: CapturedScreenshot?,
+        val healthTodaySteps: Long?,
     )
 
     private fun HourlyStepEntity.toDomain() = HourlyCsvRecord(

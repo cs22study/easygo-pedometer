@@ -41,7 +41,7 @@ class ActiveTimeTracker(
         lastStepEpochSeconds = epochSeconds
 
         return if (gap <= maxActiveGapSeconds) {
-            val effectiveGap = if (gap == 0L) estimateBurstSeconds(deltaSteps) else gap
+            val effectiveGap = if (gap == 0L) 1L else gap
             pendingSteps += deltaSteps
             pendingSeconds += effectiveGap
             commitIfBurstReady()
@@ -54,8 +54,8 @@ class ActiveTimeTracker(
     }
 
     private fun estimateBurstSeconds(steps: Long): Long {
-        // Average walking cadence ~1.5 steps/sec; conservatively attribute 1s per 2 steps, min 1s.
-        return (steps / 2L).coerceAtLeast(1L)
+        // Conservative cap (max 60s per single initial batch) prevents sensor batch spikes from injecting hours.
+        return (steps / 2L).coerceIn(1L, 60L)
     }
 
     private fun commitIfBurstReady(): Long {

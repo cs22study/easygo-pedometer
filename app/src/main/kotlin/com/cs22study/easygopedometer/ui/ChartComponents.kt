@@ -199,7 +199,7 @@ fun PeriodBarChart(
             val barW = (slotW * 0.62f).coerceAtLeast(2.dp.toPx())
             val xPaint = android.graphics.Paint().apply {
                 color = ChartLabelColor
-                textSize = 10.5.dp.toPx()
+                textSize = if (bars.size == 12) 9.dp.toPx() else 10.5.dp.toPx()
                 isAntiAlias = true
                 textAlign = android.graphics.Paint.Align.CENTER
             }

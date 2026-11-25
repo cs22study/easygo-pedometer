@@ -116,6 +116,7 @@ class StepCounterService : Service(), SensorEventListener {
 
     private suspend fun restoreTodayActiveTime() {
         val dao = AppDatabase.getInstance(applicationContext).pedometerDao()
+        dao.softDeleteImpossibleSpikes(OffsetDateTime.now().toString())
         val todayIso = LocalDate.now().toString()
         val rows = dao.getRangeHourly(todayIso, todayIso)
         val totalSteps = rows.sumOf { it.steps }

@@ -23,6 +23,7 @@
 | [01_開發內容分析與設計原理.md](./01_開發內容分析與設計原理.md) | 需求與參考圖對照、活動截圖合規設計、UI 規格、感測器與數學計算原理、CSV 規格 | 已完成 |
 | [02_Spoke1_核心引擎與建置紀錄.md](./02_Spoke1_核心引擎與建置紀錄.md) | 本機建置環境、Gradle 專案結構、`:core-calc` 與 Room 實作清單、測試驗證結果 | 已完成 |
 | [03_Spoke2_4_計步服務與圖表同步實作.md](./03_Spoke2_4_計步服務與圖表同步實作.md) | arm64/arm32/universal 分包、日週月年圖表首頁、背景計步服務、CSV 匯出與 Health Connect / Google Fit 橋接 | 已完成 |
+| [04_Spoke5_一鍵截圖與計步防暴衝修復.md](./04_Spoke5_一鍵截圖與計步防暴衝修復.md) | 419,064 步暴衝根因分析與修復、Spoke 5 `MediaProjection` 含狀態列截圖與預覽小卡、UI 排版優化 | 已完成 |
 
 ---
 
@@ -35,5 +36,5 @@
 | **Spoke 2** | 背景計步服務與感測器管線 | `StepCounterService` (`TYPE_STEP_COUNTER` + 加速度計備援)、`BootReceiver`、單元測試 | ✅ 已完成（`v0.2.0`） |
 | **Spoke 3** | 本機 CSV 匯出、設定頁與健康平台串聯 | `LocalCsvExporter`、`PreferencesRepository`、`SettingsScreen`、`HealthConnectBridge` (Google Fit) | ✅ 已完成（`v0.2.0`，CSV 匯入還原可後續擴充） |
 | **Spoke 4** | 首頁 UI 與「日/週/月/年」圖表 | 參考圖風格 UI（無廣告）、`日/週/月/年` 頁籤、累計折線圖與長條圖 | ✅ 已完成（`v0.2.0`） |
-| **Spoke 5** | 首頁一鍵截圖與預覽小卡模組 | `MediaProjection` 含狀態列全螢幕截圖、儲存相簿與預覽小卡 | ⏳ 待啟動（首頁已預留相機按鈕） |
+| **Spoke 5** | 首頁一鍵截圖與預覽小卡模組 | `ScreenCaptureService` (`MediaProjection` 含狀態列截圖)、儲存相簿與底部預覽小卡 | ✅ 已完成（`v0.3.0`） |
 | **Spoke 6** | GitHub CI/CD 與選用雲端備份 | GitHub Actions 自動測試與建置 APK、GitHub Pages 下載頁、（選用）GAS/Drive 備份 | ⏳ 待啟動 |

@@ -10,6 +10,8 @@ import androidx.health.connect.client.records.ExerciseSessionRecord
 import androidx.health.connect.client.records.StepsRecord
 import androidx.health.connect.client.records.metadata.Device
 import androidx.health.connect.client.records.metadata.Metadata
+import androidx.health.connect.client.request.AggregateRequest
+import androidx.health.connect.client.time.TimeRangeFilter
 import com.cs22study.easygopedometer.data.db.HourlyStepEntity
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -83,7 +85,7 @@ object HealthConnectBridge {
             return HealthSyncResult(false, "請先授權 Health Connect 步數與運動寫入權限")
         }
 
-        val activeEntities = entities.filter { !it.isDeleted && it.steps > 0L }
+        val activeEntities = entities.filter { !it.isDeleted && it.steps in 1L..30_000L }
         if (activeEntities.isEmpty()) {
             return HealthSyncResult(true, "目前尚無可同步之有效步數紀錄")
         }
@@ -128,10 +130,33 @@ object HealthConnectBridge {
 
         return runCatching {
             client.insertRecords(records)
-            HealthSyncResult(true, "已同步 ${activeEntities.size} 筆時段紀錄至 Health Connect / Google Fit")
+            val todayTotal = readTodayStepsInternal(client)
+            val suffix = if (todayTotal != null) "（今日總計 %,d 步）".format(todayTotal) else ""
+            HealthSyncResult(true, "已同步 ${activeEntities.size} 筆時段紀錄至 Health Connect$suffix")
         }.getOrElse { ex ->
             HealthSyncResult(false, "同步失敗：${ex.localizedMessage ?: "未知錯誤"}")
         }
+    }
+
+    suspend fun readTodaySteps(context: Context): Long? {
+        if (!hasAllPermissions(context)) return null
+        val client = HealthConnectClient.getOrCreate(context)
+        return readTodayStepsInternal(client)
+    }
+
+    private suspend fun readTodayStepsInternal(client: HealthConnectClient): Long? {
+        return runCatching {
+            val zone = ZoneId.systemDefault()
+            val startOfDay = LocalDate.now().atStartOfDay(zone).toInstant()
+            val now = java.time.Instant.now()
+            val response = client.aggregate(
+                AggregateRequest(
+                    metrics = setOf(StepsRecord.COUNT_TOTAL),
+                    timeRangeFilter = TimeRangeFilter.between(startOfDay, now),
+                )
+            )
+            response[StepsRecord.COUNT_TOTAL]
+        }.getOrNull()
     }
 
     fun isGoogleFitInstalled(context: Context): Boolean {

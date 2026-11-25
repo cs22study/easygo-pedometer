@@ -33,6 +33,9 @@ interface PedometerDao {
     @Query("UPDATE hourly_steps SET isDeleted = 1, deletedAtIso = :deletedAtIso WHERE dateIso = :dateIso")
     suspend fun softDeleteDay(dateIso: String, deletedAtIso: String)
 
+    @Query("UPDATE hourly_steps SET isDeleted = 1, deletedAtIso = :deletedAtIso WHERE steps > 30000 AND isDeleted = 0")
+    suspend fun softDeleteImpossibleSpikes(deletedAtIso: String): Int
+
     @Query("UPDATE hourly_steps SET isDeleted = 0, deletedAtIso = '' WHERE dateIso = :dateIso")
     suspend fun restoreDay(dateIso: String)
 
