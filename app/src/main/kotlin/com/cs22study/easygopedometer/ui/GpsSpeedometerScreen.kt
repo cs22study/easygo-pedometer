@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.cs22study.easygopedometer.calc.ActiveTimeTracker
 import com.cs22study.easygopedometer.calc.DateDisplayFormatter
+import com.cs22study.easygopedometer.calc.GpsRideCalculator
 import com.cs22study.easygopedometer.calc.GpsRideState
 import com.cs22study.easygopedometer.calc.SpeedMode
 import com.cs22study.easygopedometer.service.CapturedScreenshot
@@ -210,10 +211,11 @@ fun GpsSpeedometerScreen(
                     )
                 }
 
-                // Speedometer Gauge scaled dynamically by selected mode (60 / 150 / 400 km/h)
+                // Dual Analog Needle + Digital Speedometer Gauge (60 / 160 / 400 km/h)
                 SpeedometerGauge(
                     speedKmh = rideState.currentSpeedKmh,
                     maxScaleKmh = rideState.speedMode.maxScaleKmh,
+                    tickLabels = GpsRideCalculator.gaugeTickValues(rideState.speedMode),
                 )
 
                 // 2x2 Metrics Grid

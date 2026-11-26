@@ -42,5 +42,5 @@
 | **Spoke 4** | 首頁 UI 與「日/週/月/年」圖表 | 參考圖風格 UI（無廣告）、`日/週/月/年` 頁籤、累計折線圖與長條圖 | ✅ 已完成（`v0.2.0`） |
 | **Spoke 5** | 首頁一鍵截圖與預覽小卡模組 | `ScreenCaptureService` (`MediaProjection` 含狀態列截圖)、儲存相簿與底部預覽小卡 | ✅ 已完成（`v0.3.0`） |
 | **Spoke 6** | 首頁暗黑亮黃改版、GPS 時速表與永久簽章 | 4 卡設計、`UnitPill` 修正、三段測速、`keystore` 永久簽章、Android 7.1.1 適配 | ✅ 已完成（`v0.4.0`–`v0.5.2`） |
-| **Spoke 7** | 腳丫丫 EzGo Logo 與指針＋數位雙顯儀表 | `單車 60 · 車 160 · 高鐵 400`、實體指針刻度儀表、全新 Logo 上線 | 📐 分析設計中（`v0.6.0` 規劃） |
+| **Spoke 7** | 腳丫丫 EzGo Logo 與指針＋數位雙顯儀表 | `單車 60 · 車 160 · 高鐵 400`、實體指針刻度儀表、漸層彩色 Logo 上線 | ✅ 已完成（`v0.6.0`） |
 | **Spoke 8** | 本機 CSV 匯入還原與 GitHub CI/CD 官網 | CSV 匯入還原、GitHub Pages 下載頁、（選用）GAS/Drive 備份 | ⏳ 待啟動（詳見 [TODO_LIST.md](./TODO_LIST.md)） |

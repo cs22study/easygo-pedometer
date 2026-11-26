@@ -21,10 +21,10 @@ enum class SpeedMode(
         maxAcceptableAccuracyM = 35f,
         trackCalories = true,
     ),
-    CAR_TRAIN(
-        label = "汽車火車",
-        maxScaleKmh = 150f,
-        maxPlausibleKmh = 220.0,
+    VEHICLE(
+        label = "車",
+        maxScaleKmh = 160f,
+        maxPlausibleKmh = 230.0,
         maxAcceptableAccuracyM = 65f,
         trackCalories = false,
     ),
@@ -59,13 +59,21 @@ data class GpsRideState(
 )
 
 /**
- * Pure Kotlin GPS speedometer calculator supporting Bike (60 km/h), Car/Train (150 km/h),
+ * Pure Kotlin GPS speedometer calculator supporting Bike (60 km/h), Vehicle (160 km/h),
  * and High-Speed Rail (400 km/h), with Haversine fallback and anti-drift filtering.
  */
 object GpsRideCalculator {
 
     private const val EARTH_RADIUS_METERS = 6371000.0
     private const val MIN_MOVING_SPEED_KMH = 1.5
+
+    /**
+     * Returns 5 evenly spaced dial scale integers for the given [mode] (0%, 25%, 50%, 75%, 100%).
+     */
+    fun gaugeTickValues(mode: SpeedMode): List<Int> {
+        val max = mode.maxScaleKmh.toInt()
+        return listOf(0, max / 4, max / 2, (max * 3) / 4, max)
+    }
 
     fun haversineMeters(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
         val dLat = Math.toRadians(lat2 - lat1)

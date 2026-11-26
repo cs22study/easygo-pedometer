@@ -1,14 +1,16 @@
 package com.cs22study.easygopedometer.ui
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
@@ -19,6 +21,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -28,7 +31,7 @@ import kotlin.math.sin
 val BrightYellow = Color(0xFFFFD600)
 
 /**
- * Compact bar sparkline inspired by dark trend cards (Images 3 & 4).
+ * Compact bar sparkline inspired by dark trend cards.
  */
 @Composable
 fun MiniSparklineBars(
@@ -70,82 +73,170 @@ fun MiniSparklineBars(
 }
 
 /**
- * Cycling speedometer arc gauge (0 - 60 km/h) with bright yellow bold center readout.
+ * Dual-display analog needle + digital speedometer dial (270-degree sweep with 40 ticks & 5 labels).
  */
 @Composable
 fun SpeedometerGauge(
     speedKmh: Double,
     maxScaleKmh: Float = 60f,
-    modifier: Modifier = Modifier.size(230.dp),
+    tickLabels: List<Int> = listOf(0, 15, 30, 45, 60),
+    modifier: Modifier = Modifier.size(258.dp),
 ) {
-    val fraction = (speedKmh.toFloat() / maxScaleKmh).coerceIn(0f, 1f)
+    val targetFraction = (speedKmh.toFloat() / maxScaleKmh).coerceIn(0f, 1f)
+    val animatedFraction by animateFloatAsState(
+        targetValue = targetFraction,
+        animationSpec = tween(durationMillis = 420),
+        label = "speedNeedleAnim",
+    )
+
     Box(modifier = modifier, contentAlignment = Alignment.Center) {
         Canvas(modifier = Modifier.fillMaxSize()) {
-            val strokeW = 14.dp.toPx()
-            val pad = strokeW / 2f + 8.dp.toPx()
-            val arcSize = Size(size.width - pad * 2, size.height - pad * 2)
-            val topLeft = Offset(pad, pad)
+            val startAngle = 135f
+            val sweepTotal = 270f
+            val strokeW = 10.dp.toPx()
+            val outerPad = 18.dp.toPx()
+            val center = Offset(size.width / 2f, size.height / 2f)
+            val arcRadius = (size.minDimension / 2f) - outerPad
+            val arcTopLeft = Offset(center.x - arcRadius, center.y - arcRadius)
+            val arcSize = Size(arcRadius * 2f, arcRadius * 2f)
 
-            // Track arc
+            // Subtle inner dark face
+            drawCircle(
+                color = Color(0xFF141922),
+                radius = arcRadius,
+                center = center,
+            )
+
+            // Background arc track
             drawArc(
-                color = Color(0xFF2D333B),
-                startAngle = 140f,
-                sweepAngle = 260f,
+                color = Color(0xFF28303D),
+                startAngle = startAngle,
+                sweepAngle = sweepTotal,
                 useCenter = false,
-                topLeft = topLeft,
+                topLeft = arcTopLeft,
                 size = arcSize,
                 style = Stroke(width = strokeW, cap = StrokeCap.Round),
             )
 
-            // Active speed arc
-            if (fraction > 0f) {
+            // Active progress arc
+            if (animatedFraction > 0f) {
                 drawArc(
                     color = BrightYellow,
-                    startAngle = 140f,
-                    sweepAngle = 260f * fraction,
+                    startAngle = startAngle,
+                    sweepAngle = sweepTotal * animatedFraction,
                     useCenter = false,
-                    topLeft = topLeft,
+                    topLeft = arcTopLeft,
                     size = arcSize,
                     style = Stroke(width = strokeW, cap = StrokeCap.Round),
                 )
             }
 
-            // Needle dot at arc tip
-            val angleDeg = 140f + 260f * fraction
-            val rad = Math.toRadians(angleDeg.toDouble())
-            val radius = arcSize.width / 2f
-            val cx = size.width / 2f + (radius * cos(rad)).toFloat()
-            val cy = size.height / 2f + (radius * sin(rad)).toFloat()
-            drawCircle(color = Color.White, radius = 6.dp.toPx(), center = Offset(cx, cy))
+            // 40 tick marks (every 10th is a major tick)
+            val totalTicks = 40
+            for (i in 0..totalTicks) {
+                val frac = i / totalTicks.toFloat()
+                val deg = startAngle + sweepTotal * frac
+                val rad = Math.toRadians(deg.toDouble())
+                val isMajor = i % 10 == 0
+                val isMid = i % 5 == 0
+                val tickOuter = arcRadius - strokeW / 2f - 4.dp.toPx()
+                val tickLen = when {
+                    isMajor -> 12.dp.toPx()
+                    isMid -> 8.dp.toPx()
+                    else -> 5.dp.toPx()
+                }
+                val tickInner = tickOuter - tickLen
+                val activeTick = frac <= animatedFraction + 0.002f
+                drawLine(
+                    color = when {
+                        activeTick -> BrightYellow
+                        isMajor -> Color.White.copy(alpha = 0.72f)
+                        else -> Color.White.copy(alpha = 0.28f)
+                    },
+                    start = Offset(
+                        center.x + (tickInner * cos(rad)).toFloat(),
+                        center.y + (tickInner * sin(rad)).toFloat(),
+                    ),
+                    end = Offset(
+                        center.x + (tickOuter * cos(rad)).toFloat(),
+                        center.y + (tickOuter * sin(rad)).toFloat(),
+                    ),
+                    strokeWidth = if (isMajor) 2.2.dp.toPx() else 1.2.dp.toPx(),
+                    cap = StrokeCap.Round,
+                )
+            }
 
-            // Scale labels: 0, mid, maxScaleKmh
-            val scalePaint = android.graphics.Paint().apply {
-                color = android.graphics.Color.argb(215, 255, 214, 0)
-                textSize = 11.dp.toPx()
+            // 5 major scale labels inside the ring
+            val labelPaint = android.graphics.Paint().apply {
+                color = android.graphics.Color.argb(230, 255, 214, 0)
+                textSize = 11.5.dp.toPx()
                 isFakeBoldText = true
                 isAntiAlias = true
                 textAlign = android.graphics.Paint.Align.CENTER
             }
-            val labelR = radius + 16.dp.toPx()
-            listOf(0f to "0", 0.5f to "${(maxScaleKmh / 2f).toInt()}", 1f to "${maxScaleKmh.toInt()}").forEach { (f, txt) ->
-                val aRad = Math.toRadians((140f + 260f * f).toDouble())
-                val lx = size.width / 2f + (labelR * cos(aRad)).toFloat()
-                val ly = size.height / 2f + (labelR * sin(aRad)).toFloat() + 4.dp.toPx()
-                drawContext.canvas.nativeCanvas.drawText(txt, lx, ly, scalePaint)
+            val labelRadius = arcRadius - 30.dp.toPx()
+            val labelCount = (tickLabels.size - 1).coerceAtLeast(1)
+            tickLabels.forEachIndexed { idx, value ->
+                val frac = idx / labelCount.toFloat()
+                val rad = Math.toRadians((startAngle + sweepTotal * frac).toDouble())
+                val lx = center.x + (labelRadius * cos(rad)).toFloat()
+                val ly = center.y + (labelRadius * sin(rad)).toFloat() + 4.dp.toPx()
+                drawContext.canvas.nativeCanvas.drawText(value.toString(), lx, ly, labelPaint)
             }
+
+            // Tapered Analog Needle rotating around center pivot
+            val needleAngleRad = Math.toRadians((startAngle + sweepTotal * animatedFraction).toDouble())
+            val perpRad = needleAngleRad + Math.PI / 2.0
+            val needleLen = arcRadius - 22.dp.toPx()
+            val tailLen = 14.dp.toPx()
+            val baseHalfW = 4.5.dp.toPx()
+
+            val tip = Offset(
+                center.x + (needleLen * cos(needleAngleRad)).toFloat(),
+                center.y + (needleLen * sin(needleAngleRad)).toFloat(),
+            )
+            val leftBase = Offset(
+                center.x - (tailLen * cos(needleAngleRad)).toFloat() + (baseHalfW * cos(perpRad)).toFloat(),
+                center.y - (tailLen * sin(needleAngleRad)).toFloat() + (baseHalfW * sin(perpRad)).toFloat(),
+            )
+            val rightBase = Offset(
+                center.x - (tailLen * cos(needleAngleRad)).toFloat() - (baseHalfW * cos(perpRad)).toFloat(),
+                center.y - (tailLen * sin(needleAngleRad)).toFloat() - (baseHalfW * sin(perpRad)).toFloat(),
+            )
+
+            val needlePath = Path().apply {
+                moveTo(tip.x, tip.y)
+                lineTo(leftBase.x, leftBase.y)
+                lineTo(rightBase.x, rightBase.y)
+                close()
+            }
+            drawPath(needlePath, color = Color(0xFFFF5252))
+
+            // Center pivot hub
+            drawCircle(color = BrightYellow, radius = 10.dp.toPx(), center = center)
+            drawCircle(color = Color(0xFF141922), radius = 4.5.dp.toPx(), center = center)
         }
 
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        // Digital numeric speed readout positioned cleanly in the bottom-center gap below pivot
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 14.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
             Text(
                 text = "%.1f".format(speedKmh),
                 color = BrightYellow,
-                fontSize = 54.sp,
-                fontWeight = FontWeight.Bold,
+                style = TextStyle(
+                    fontSize = 36.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFeatureSettings = "tnum",
+                ),
             )
             Text(
                 text = "km/h",
                 color = BrightYellow.copy(alpha = 0.85f),
-                fontSize = 18.sp,
+                fontSize = 13.sp,
                 fontWeight = FontWeight.Bold,
             )
         }
@@ -226,7 +317,6 @@ fun BikeIcon(modifier: Modifier = Modifier.size(24.dp), tint: Color = BrightYell
         val rightWheel = Offset(w * 0.76f, h * 0.68f)
         drawCircle(tint, radius = wheelR, center = leftWheel, style = Stroke(stroke))
         drawCircle(tint, radius = wheelR, center = rightWheel, style = Stroke(stroke))
-        // Frame
         val crank = Offset(w * 0.48f, h * 0.68f)
         val seat = Offset(w * 0.42f, h * 0.38f)
         val stem = Offset(w * 0.65f, h * 0.38f)
@@ -236,7 +326,6 @@ fun BikeIcon(modifier: Modifier = Modifier.size(24.dp), tint: Color = BrightYell
         drawLine(tint, seat, stem, strokeWidth = stroke)
         drawLine(tint, crank, stem, strokeWidth = stroke)
         drawLine(tint, stem, rightWheel, strokeWidth = stroke)
-        // Handlebar & saddle
         drawLine(tint, Offset(w * 0.36f, h * 0.36f), Offset(w * 0.48f, h * 0.36f), strokeWidth = stroke, cap = StrokeCap.Round)
         drawLine(tint, Offset(w * 0.62f, h * 0.32f), Offset(w * 0.72f, h * 0.32f), strokeWidth = stroke, cap = StrokeCap.Round)
     }

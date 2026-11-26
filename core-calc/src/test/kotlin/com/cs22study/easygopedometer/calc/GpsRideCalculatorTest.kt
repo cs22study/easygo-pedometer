@@ -48,14 +48,29 @@ class GpsRideCalculatorTest {
     }
 
     @Test
+    fun `vehicle 160 mode supports 135 kmh train or highway speed without calories`() {
+        var state = GpsRideState(isTracking = true, speedMode = SpeedMode.VEHICLE)
+        state = GpsRideCalculator.onLocationUpdate(
+            state,
+            GpsPoint(25.0000, 121.5000, timestampMillis = 0L, speedMps = 37.5f, accuracyMeters = 20f),
+        )
+        state = GpsRideCalculator.onLocationUpdate(
+            state,
+            GpsPoint(25.00337, 121.5000, timestampMillis = 10_000L, speedMps = 37.5f, accuracyMeters = 20f),
+            weightKg = 70.0,
+        )
+
+        assertEquals(135.0, state.currentSpeedKmh)
+        assertEquals(0.0, state.caloriesKcal)
+    }
+
+    @Test
     fun `HSR mode supports 300 kmh without calories inflation`() {
         var state = GpsRideState(isTracking = true, speedMode = SpeedMode.HSR)
-        // 83.33 m/s == 300.0 km/h
         state = GpsRideCalculator.onLocationUpdate(
             state,
             GpsPoint(25.0000, 121.5000, timestampMillis = 0L, speedMps = 83.333f, accuracyMeters = 45f),
         )
-        // ~833 m north in 10 seconds
         state = GpsRideCalculator.onLocationUpdate(
             state,
             GpsPoint(25.0075, 121.5000, timestampMillis = 10_000L, speedMps = 83.333f, accuracyMeters = 45f),
@@ -66,5 +81,12 @@ class GpsRideCalculatorTest {
         assertEquals(300.0, state.maxSpeedKmh)
         assertTrue(state.distanceMeters in 800L..860L, "Expected ~833m, got ${state.distanceMeters}")
         assertEquals(0.0, state.caloriesKcal)
+    }
+
+    @Test
+    fun `gaugeTickValues returns 5 clean evenly spaced labels per mode`() {
+        assertEquals(listOf(0, 15, 30, 45, 60), GpsRideCalculator.gaugeTickValues(SpeedMode.BIKE))
+        assertEquals(listOf(0, 40, 80, 120, 160), GpsRideCalculator.gaugeTickValues(SpeedMode.VEHICLE))
+        assertEquals(listOf(0, 100, 200, 300, 400), GpsRideCalculator.gaugeTickValues(SpeedMode.HSR))
     }
 }

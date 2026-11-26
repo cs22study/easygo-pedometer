@@ -366,12 +366,12 @@ fun HomeScreen(
                                 fontWeight = FontWeight.Bold,
                             )
                             Text(
-                                text = "單車(60) · 汽車火車(150) · 高鐵(400)",
+                                text = "單車 60 · 車 160 · 高鐵 400",
                                 color = BrightYellow.copy(alpha = 0.78f),
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
                                 maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
+                                softWrap = false,
                             )
                         }
                         Icon(

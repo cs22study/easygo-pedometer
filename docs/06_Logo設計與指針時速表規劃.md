@@ -49,5 +49,13 @@
   1. **Android 8.0+ Adaptive Icon**（`mipmap-anydpi-v26/ic_launcher.xml`）：背景層 `#0B0E14` + 前景層安全區內（`66%` 中心安全範圍）繪製「腳丫丫 + EzGo」向量/高解析圖層，支援圓形、圓角矩形、水滴形等各廠牌桌面裁切。
   2. **Android 7.x 傳統 PNG 圖示**（`mipmap-mdpi` `48px` 至 `mipmap-xxxhdpi` `192px`）：預先渲染圓角方形透明底版本，確保 OPPO R11s Plus（Android 7.1.1）桌面與安裝器顯示清晰。
 - **預覽圖檔**：
-  - V2 漸層彩色字版（推薦定案）：[ezgo_logo_proposal_rainbow.jpg](./assets/ezgo_logo_proposal_rainbow.jpg)
+  - V2 漸層彩色字版（已定案並套用至 `v0.6.0`）：[ezgo_logo_proposal_rainbow.jpg](./assets/ezgo_logo_proposal_rainbow.jpg)
   - V1 經典白黃字版：[ezgo_logo_proposal.jpg](./assets/ezgo_logo_proposal.jpg)
+
+---
+
+## 4. 實作與驗證結果（`v0.6.0`）
+
+- **全數單元測試通過（共 30 項）**：`:core-calc:test` 29/29 通過（含 `GpsRideCalculatorTest` 5 項：單車、車 160、高鐵 400、防飄移與 5 刻度驗證）+ `:app:testDebugUnitTest` 1/1 通過。
+- **靜態檢查通過**：`:app:lintDebug` 與 `:app:lintVitalRelease` 通過。
+- **圖示與簽章**：全尺寸 `mipmap-*` PNG 與 `mipmap-anydpi-v26/ic_launcher.xml` 已整合，並維持 `CN=EasyGo Pedometer` 永久金鑰 v1 + v2 雙重簽章。
