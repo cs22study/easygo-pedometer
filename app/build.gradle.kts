@@ -30,8 +30,8 @@ android {
         applicationId = "com.cs22study.easygopedometer"
         minSdk = 24
         targetSdk = 35
-        versionCode = 7
-        versionName = "0.5.0"
+        versionCode = 8
+        versionName = "0.5.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -101,6 +101,25 @@ android {
     buildFeatures {
         compose = true
     }
+
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+        resources {
+            excludes += listOf("assets/dexopt/**")
+        }
+    }
+}
+
+tasks.configureEach {
+    if (name.contains("ArtProfile")) {
+        enabled = false
+    }
+}
+
+configurations.all {
+    exclude(group = "androidx.profileinstaller", module = "profileinstaller")
 }
 
 dependencies {

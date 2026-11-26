@@ -44,6 +44,15 @@
   - 於本機產生持久化簽章金鑰（置於 `.gitignore` 忽略之 `keystore/` 目錄，絕不外洩至 Git）。
   - `app/build.gradle.kts` 優先讀取 CI 環境變數（`ANDROID_KEYSTORE_PATH` / `PASS` / `ALIAS`）或本機 `keystore/keystore.properties`，啟用 v1 + v2 雙重永久簽章；CI 端搭配 GitHub Repository Secrets 還原同一把金鑰，確保後續每次更新皆可直接覆蓋安裝並完整保留歷史步數資料庫。
 
+---
+
+## 4. Android 7.1.1 / ColorOS 3.2 舊機相容性強化（`v0.5.1`）
+
+針對 OPPO R11s Plus（Snapdragon 660 / Android 7.1.1 / ColorOS 3.2）實測安裝卡住問題，進行以下封裝強化：
+1. **傳統函式庫解壓封裝**：設定 `jniLibs.useLegacyPackaging = true`，於 Manifest 啟用 `android:extractNativeLibs="true"`，避免舊版 ColorOS 套件安裝器掛載未壓縮 `.so` 時卡死。
+2. **移除 ProfileInstaller 元件**：透過 Gradle 排除 `androidx.profileinstaller` 並停用 `ArtProfile` 任務，防止舊版 `PackageInstaller` 觸發不相容組件。
+3. **停用資源路徑縮短優化**：於 `gradle.properties` 設定 `android.enableResourceOptimizations=false`，維持標準資源表結構相容 2017 年舊機。
+
 ### 2.3 GPS 速度與防飄移計算原理（`GpsRideCalculator`）
 - **即時速度來源**：優先取衛星都卜勒速度 `speedMps * 3.6`；若無則以兩點 **Haversine 球面距離公式** $\Delta d / \Delta t$ 計算。
 - **靜止飄移過濾**：
