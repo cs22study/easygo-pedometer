@@ -53,6 +53,15 @@
 2. **移除 ProfileInstaller 元件**：透過 Gradle 排除 `androidx.profileinstaller` 並停用 `ArtProfile` 任務，防止舊版 `PackageInstaller` 觸發不相容組件。
 3. **停用資源路徑縮短優化**：於 `gradle.properties` 設定 `android.enableResourceOptimizations=false`，維持標準資源表結構相容 2017 年舊機。
 
+---
+
+## 5. 首頁視覺與單位顯示優化（`v0.5.2`）
+
+- **修正 `時:分:秒` 截斷問題**：將 `時:分:秒`、`公尺`、`千卡`、`步` 改以深金底色膠囊標籤（`UnitPill`）置於卡片標題列右側，數值獨立佔滿下方空間並採等寬數字（`tnum`），徹底解決不同螢幕寬度下文字遭右側長條小圖擠壓裁切之問題。
+- **視覺美感升級**：
+  - 「今日步數」採深藍灰金漸層主卡（`HeroStepsCard`），內建運動部 `8,000` 步目標進度條與達標徽章。
+  - 首頁 4 張卡片與「GPS 即時時速表」入口卡整頁排版緊湊平衡，單一螢幕無需捲動即可完整截圖。
+
 ### 2.3 GPS 速度與防飄移計算原理（`GpsRideCalculator`）
 - **即時速度來源**：優先取衛星都卜勒速度 `speedMps * 3.6`；若無則以兩點 **Haversine 球面距離公式** $\Delta d / \Delta t$ 計算。
 - **靜止飄移過濾**：

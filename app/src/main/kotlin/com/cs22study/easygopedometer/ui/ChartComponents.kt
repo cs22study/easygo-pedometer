@@ -34,27 +34,32 @@ val BrightYellow = Color(0xFFFFD600)
 fun MiniSparklineBars(
     values: List<Long>,
     accentColor: Color = BrightYellow,
-    modifier: Modifier = Modifier.size(width = 108.dp, height = 38.dp),
+    modifier: Modifier = Modifier.size(width = 88.dp, height = 36.dp),
 ) {
     Canvas(modifier = modifier) {
         val count = values.size.coerceAtLeast(1)
         val maxVal = (values.maxOrNull() ?: 0L).coerceAtLeast(1L)
         val slotW = size.width / count.toFloat()
-        val barW = (slotW * 0.56f).coerceAtLeast(2.dp.toPx())
+        val barW = (slotW * 0.54f).coerceAtLeast(2.dp.toPx())
         val baseY = size.height
 
         values.forEachIndexed { idx, v ->
             val cx = slotW * (idx + 0.5f)
             if (v <= 0L) {
                 drawCircle(
-                    color = Color.White.copy(alpha = 0.25f),
-                    radius = 1.4.dp.toPx(),
+                    color = Color.White.copy(alpha = 0.22f),
+                    radius = 1.3.dp.toPx(),
                     center = Offset(cx, baseY - 2.dp.toPx()),
                 )
             } else {
                 val h = (size.height * (v.toFloat() / maxVal.toFloat())).coerceIn(4.dp.toPx(), size.height)
+                val barColor = if (v == maxVal || idx == values.lastIndex) {
+                    accentColor
+                } else {
+                    accentColor.copy(alpha = 0.55f)
+                }
                 drawRoundRect(
-                    color = accentColor,
+                    color = barColor,
                     topLeft = Offset(cx - barW / 2f, baseY - h),
                     size = Size(barW, h),
                     cornerRadius = CornerRadius(2.dp.toPx()),

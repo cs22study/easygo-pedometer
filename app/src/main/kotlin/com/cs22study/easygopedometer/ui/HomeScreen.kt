@@ -24,10 +24,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
@@ -48,9 +47,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -61,10 +62,15 @@ import com.cs22study.easygopedometer.calc.DistanceUnit
 import com.cs22study.easygopedometer.service.CapturedScreenshot
 import kotlinx.coroutines.delay
 
-private val DarkBg = Color(0xFF0D1117)
-private val TopBarBg = Color(0xFF161B22)
-private val CardBg = Color(0xFF1C2128)
-private val CardBorder = Color(0xFF30363D)
+private val DarkBg = Color(0xFF0B0E14)
+private val TopBarBg = Color(0xFF141922)
+private val HeroCardTop = Color(0xFF232936)
+private val HeroCardBottom = Color(0xFF181D27)
+private val CardBg = Color(0xFF171C24)
+private val CardBorder = Color(0xFF2B323F)
+private val UnitBadgeBg = Color(0xFF2A2612)
+private val ProgressTrackBg = Color(0xFF2A303C)
+private val DailyGoalSteps = 8000L
 
 @Composable
 fun HomeScreen(
@@ -115,7 +121,6 @@ fun HomeScreen(
             sparklineValues = if (curve.size <= 1) {
                 listOf(currentMetrics.steps)
             } else {
-                // Convert cumulative curve into per-2-hour buckets for mini trend bars
                 val hourly = curve.mapIndexed { idx, pt ->
                     if (idx == 0) pt.cumulativeSteps else (pt.cumulativeSteps - curve[idx - 1].cumulativeSteps).coerceAtLeast(0L)
                 }
@@ -153,13 +158,13 @@ fun HomeScreen(
             .background(DarkBg),
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
-            // Top dark navigation bar with 4 tabs + screenshot button + menu
+            // Top dark navigation bar with 4 pill tabs + screenshot button + menu
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(TopBarBg)
                     .statusBarsPadding()
-                    .height(54.dp),
+                    .height(52.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Row(
@@ -174,7 +179,7 @@ fun HomeScreen(
                         Box(
                             modifier = Modifier
                                 .weight(1f)
-                                .padding(horizontal = 3.dp, vertical = 8.dp)
+                                .padding(horizontal = 3.dp, vertical = 7.dp)
                                 .clip(RoundedCornerShape(18.dp))
                                 .background(if (selected) BrightYellow else CardBg)
                                 .clickable { onSelectTab(tab) }
@@ -183,7 +188,7 @@ fun HomeScreen(
                         ) {
                             Text(
                                 text = tab.label,
-                                color = if (selected) Color.Black else BrightYellow.copy(alpha = 0.85f),
+                                color = if (selected) Color.Black else BrightYellow.copy(alpha = 0.88f),
                                 fontSize = 15.sp,
                                 fontWeight = FontWeight.Bold,
                             )
@@ -191,7 +196,6 @@ fun HomeScreen(
                     }
                 }
 
-                // One-click full-screen screenshot button
                 IconButton(onClick = onScreenshotClick) {
                     CameraIcon(tint = BrightYellow)
                 }
@@ -238,14 +242,14 @@ fun HomeScreen(
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState())
                     .navigationBarsPadding()
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 if (needsStepPermission) {
                     Surface(
-                        color = Color(0xFF2D2500),
+                        color = UnitBadgeBg,
                         shape = RoundedCornerShape(10.dp),
-                        border = BorderStroke(1.dp, BrightYellow.copy(alpha = 0.6f)),
+                        border = BorderStroke(1.dp, BrightYellow.copy(alpha = 0.65f)),
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable { onRequestPermissions() },
@@ -270,7 +274,7 @@ fun HomeScreen(
                     Text(
                         text = "◀",
                         color = BrightYellow,
-                        fontSize = 20.sp,
+                        fontSize = 19.sp,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier
                             .clickable { onPrevious() }
@@ -279,13 +283,13 @@ fun HomeScreen(
                     Text(
                         text = currentHeader,
                         color = BrightYellow,
-                        fontSize = 22.sp,
+                        fontSize = 21.sp,
                         fontWeight = FontWeight.Bold,
                     )
                     Text(
                         text = "▶",
                         color = if (state.canGoNext) BrightYellow else Color.Transparent,
-                        fontSize = 20.sp,
+                        fontSize = 19.sp,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier
                             .then(if (state.canGoNext) Modifier.clickable { onNext() } else Modifier)
@@ -293,77 +297,94 @@ fun HomeScreen(
                     )
                 }
 
-                // Card 1: 今日步數 (Bold Bright Yellow)
-                MetricTrendCard(
+                // Card 1: Hero Steps Card (with 8,000-step progress bar on Day tab)
+                HeroStepsCard(
                     title = stepsCardTitle,
-                    value = "%,d".format(currentMetrics.steps),
-                    unit = "步",
-                    icon = { FootprintIcon(tint = BrightYellow) },
+                    steps = currentMetrics.steps,
+                    showDailyGoal = state.selectedTab == HomeTab.DAY,
                     sparklineValues = sparklineValues,
-                    accentColor = BrightYellow,
-                    isHero = true,
                 )
 
-                // Card 2: 累計時間 (時:分:秒, Bold Bright Yellow)
-                MetricTrendCard(
+                // Card 2: 累計時間 (時:分:秒 in crisp title badge, zero truncation!)
+                CompactMetricCard(
                     title = "累計時間",
+                    unitBadge = "時:分:秒",
                     value = currentMetrics.formattedDuration,
-                    unit = "時:分:秒",
                     icon = { StopwatchIcon(tint = BrightYellow) },
                     sparklineValues = sparklineValues,
-                    accentColor = BrightYellow.copy(alpha = 0.85f),
                 )
 
-                // Card 3: 換算距離 (公尺, Bold Bright Yellow)
-                MetricTrendCard(
+                // Card 3: 換算距離 (公尺 / 公里)
+                CompactMetricCard(
                     title = "換算距離",
+                    unitBadge = distUnitText,
                     value = distValue,
-                    unit = distUnitText,
                     icon = { RulerIcon(tint = BrightYellow) },
                     sparklineValues = sparklineValues,
-                    accentColor = BrightYellow.copy(alpha = 0.85f),
                 )
 
-                // Card 4: 燃燒熱量 (千卡, Bold Bright Yellow)
-                MetricTrendCard(
+                // Card 4: 燃燒熱量 (千卡)
+                CompactMetricCard(
                     title = "燃燒熱量",
+                    unitBadge = "千卡",
                     value = "%.1f".format(currentMetrics.caloriesKcal),
-                    unit = "千卡",
                     icon = { FlameIcon(tint = BrightYellow) },
                     sparklineValues = sparklineValues,
-                    accentColor = BrightYellow.copy(alpha = 0.85f),
                 )
 
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(2.dp))
 
-                // Cycling GPS Speedometer Entry Button in remaining space
-                Button(
+                // GPS Speedometer Entry Card in remaining space
+                Surface(
                     onClick = onOpenGpsSpeedometer,
                     shape = RoundedCornerShape(16.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = CardBg,
-                        contentColor = BrightYellow,
-                    ),
-                    border = BorderStroke(1.5.dp, BrightYellow),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(62.dp),
+                    color = Color.Transparent,
+                    border = BorderStroke(1.5.dp, BrightYellow.copy(alpha = 0.9f)),
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
-                    BikeIcon(tint = BrightYellow)
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Text(
-                        text = "GPS 即時時速表（單車 / 車輛 / 高鐵）",
-                        color = BrightYellow,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                    )
+                    Row(
+                        modifier = Modifier
+                            .background(Brush.horizontalGradient(listOf(HeroCardTop, CardBg)))
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(UnitBadgeBg),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            BikeIcon(tint = BrightYellow)
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "GPS 即時時速表",
+                                color = BrightYellow,
+                                fontSize = 17.sp,
+                                fontWeight = FontWeight.Bold,
+                            )
+                            Text(
+                                text = "單車(60) · 汽車火車(150) · 高鐵(400)",
+                                color = BrightYellow.copy(alpha = 0.78f),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                            contentDescription = "進入",
+                            tint = BrightYellow,
+                            modifier = Modifier.size(26.dp),
+                        )
+                    }
                 }
-
-                Spacer(modifier = Modifier.height(8.dp))
             }
         }
 
-        // Bottom Screenshot Preview Card
         val shot = state.capturedScreenshot
         if (shot != null) {
             ScreenshotPreviewCard(
@@ -389,14 +410,120 @@ fun HomeScreen(
 }
 
 @Composable
-private fun MetricTrendCard(
+private fun HeroStepsCard(
     title: String,
+    steps: Long,
+    showDailyGoal: Boolean,
+    sparklineValues: List<Long>,
+) {
+    val progress = (steps.toFloat() / DailyGoalSteps.toFloat()).coerceIn(0f, 1f)
+    val goalPct = ((steps * 100L) / DailyGoalSteps).coerceAtMost(999L)
+    val badgeText = if (steps >= DailyGoalSteps) "已達 8,000 步 ✓" else "目標 8,000 · $goalPct%"
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        color = Color.Transparent,
+        border = BorderStroke(1.2.dp, BrightYellow.copy(alpha = 0.55f)),
+    ) {
+        Column(
+            modifier = Modifier
+                .background(Brush.verticalGradient(listOf(HeroCardTop, HeroCardBottom)))
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    FootprintIcon(tint = BrightYellow)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = title,
+                        color = BrightYellow,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    UnitPill("步")
+                }
+
+                if (showDailyGoal) {
+                    Surface(
+                        color = UnitBadgeBg,
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, BrightYellow.copy(alpha = 0.45f)),
+                    ) {
+                        Text(
+                            text = badgeText,
+                            color = BrightYellow,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.Bottom,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(
+                    text = "%,d".format(steps),
+                    color = BrightYellow,
+                    style = TextStyle(
+                        fontSize = if (steps >= 100_000L) 34.sp else 42.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFeatureSettings = "tnum",
+                    ),
+                    maxLines = 1,
+                    softWrap = false,
+                )
+
+                if (sparklineValues.isNotEmpty()) {
+                    MiniSparklineBars(
+                        values = sparklineValues,
+                        accentColor = BrightYellow,
+                    )
+                }
+            }
+
+            if (showDailyGoal) {
+                Spacer(modifier = Modifier.height(10.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(6.dp)
+                        .clip(RoundedCornerShape(3.dp))
+                        .background(ProgressTrackBg),
+                ) {
+                    if (progress > 0f) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth(progress)
+                                .fillMaxHeight()
+                                .clip(RoundedCornerShape(3.dp))
+                                .background(BrightYellow),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CompactMetricCard(
+    title: String,
+    unitBadge: String,
     value: String,
-    unit: String,
     icon: @Composable () -> Unit,
     sparklineValues: List<Long>,
-    accentColor: Color,
-    isHero: Boolean = false,
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -407,7 +534,7 @@ private fun MetricTrendCard(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = if (isHero) 16.dp else 14.dp),
+                .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
@@ -420,38 +547,52 @@ private fun MetricTrendCard(
                         color = BrightYellow,
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Bold,
-                    )
-                }
-                Spacer(modifier = Modifier.height(6.dp))
-                Row(verticalAlignment = Alignment.Bottom) {
-                    Text(
-                        text = value,
-                        color = BrightYellow,
-                        fontSize = if (isHero) 36.sp else 28.sp,
-                        fontWeight = FontWeight.Bold,
                         maxLines = 1,
                         softWrap = false,
                     )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = unit,
-                        color = BrightYellow.copy(alpha = 0.88f),
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        softWrap = false,
-                        modifier = Modifier.padding(bottom = 3.dp),
-                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    UnitPill(unitBadge)
                 }
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = value,
+                    color = BrightYellow,
+                    style = TextStyle(
+                        fontSize = 29.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFeatureSettings = "tnum",
+                    ),
+                    maxLines = 1,
+                    softWrap = false,
+                )
             }
 
             if (sparklineValues.isNotEmpty()) {
+                Spacer(modifier = Modifier.width(8.dp))
                 MiniSparklineBars(
                     values = sparklineValues,
-                    accentColor = accentColor,
+                    accentColor = BrightYellow,
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun UnitPill(text: String) {
+    Surface(
+        color = UnitBadgeBg,
+        shape = RoundedCornerShape(8.dp),
+    ) {
+        Text(
+            text = text,
+            color = BrightYellow.copy(alpha = 0.92f),
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            softWrap = false,
+            modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
+        )
     }
 }
 
