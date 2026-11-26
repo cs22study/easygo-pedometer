@@ -58,4 +58,5 @@
 
 - **全數單元測試通過（共 30 項）**：`:core-calc:test` 29/29 通過（含 `GpsRideCalculatorTest` 5 項：單車、車 160、高鐵 400、防飄移與 5 刻度驗證）+ `:app:testDebugUnitTest` 1/1 通過。
 - **靜態檢查通過**：`:app:lintDebug` 與 `:app:lintVitalRelease` 通過。
-- **圖示與簽章**：全尺寸 `mipmap-*` PNG 與 `mipmap-anydpi-v26/ic_launcher.xml` 已整合，並維持 `CN=EasyGo Pedometer` 永久金鑰 v1 + v2 雙重簽章。
+- **圖示與簽章**：全尺寸 `mipmap-*` PNG、`drawable-nodpi/ic_launcher_foreground.png` 與 `mipmap-anydpi-v26/ic_launcher.xml`（背景色 `#1B2026`）已整合，GitHub Actions CI（Run `45745856691`）成功發布 `v0.6.0` 三架構 APK，並以 `apksigner` 驗證憑證為 `CN=EasyGo Pedometer, O=cs22study, C=TW`（SHA-256 `ff119ee0865e211f46d854d869277e69bd12013034a2a1218d4ed4554400a5b4`）。
+- **實機安裝驗證**：OPPO R11s Plus（ColorOS 3.2 / Android 7.1.1）依「開啟飛航模式＋檔案管理員點擊 APK」方式已順利完成 `v0.6.0` 更新。

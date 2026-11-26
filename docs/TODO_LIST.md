@@ -39,6 +39,7 @@
   - [x] `SpeedometerGauge` 升級為 **40 格主副刻度線 + 動態旋轉實體指針 + 中心數位時速（`km/h`）**
   - [x] **「腳丫丫 + EzGo 漸層彩色」專屬 APP Logo** 產出全尺寸 `mipmap-*` 與 Android Adaptive Icon
   - [x] 補齊 `GpsRideCalculatorTest` 針對 `車(160)` 模式與 5 刻度計算單元測試（全數 30 項單元測試通過）
+  - [x] GitHub Release `v0.6.0` 已發布並驗證簽章；OPPO R11s Plus 實機透過「飛航模式＋檔案管理」順利完成更新
 
 ---
 
