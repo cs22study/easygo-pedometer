@@ -20,11 +20,14 @@
 
 | 文件 | 說明 | 狀態 |
 | :--- | :--- | :--- |
+| [TODO_LIST.md](./TODO_LIST.md) | 專案待辦清單（已完成、進行中 `v0.6.0` 與後續排程） | 持續更新 |
+| [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) | 開發與實機測試問題排除總錄（環境、舊機相容、感測暴衝、簽章與 UI） | 持續更新 |
 | [01_開發內容分析與設計原理.md](./01_開發內容分析與設計原理.md) | 需求與參考圖對照、活動截圖合規設計、UI 規格、感測器與數學計算原理、CSV 規格 | 已完成 |
 | [02_Spoke1_核心引擎與建置紀錄.md](./02_Spoke1_核心引擎與建置紀錄.md) | 本機建置環境、Gradle 專案結構、`:core-calc` 與 Room 實作清單、測試驗證結果 | 已完成 |
 | [03_Spoke2_4_計步服務與圖表同步實作.md](./03_Spoke2_4_計步服務與圖表同步實作.md) | arm64/arm32/universal 分包、日週月年圖表首頁、背景計步服務、CSV 匯出與 Health Connect / Google Fit 橋接 | 已完成 |
 | [04_Spoke5_一鍵截圖與計步防暴衝修復.md](./04_Spoke5_一鍵截圖與計步防暴衝修復.md) | 419,064 步暴衝根因分析與修復、Spoke 5 `MediaProjection` 含狀態列截圖與預覽小卡、UI 排版優化 | 已完成 |
-| [05_首頁改版與GPS單車時速表設計.md](./05_首頁改版與GPS單車時速表設計.md) | 首頁暗黑亮黃粗體 4 卡改版與 GPS 單車時速表規劃與計算設計 | 已完成 |
+| [05_首頁改版與GPS單車時速表設計.md](./05_首頁改版與GPS單車時速表設計.md) | 首頁暗黑亮黃粗體 4 卡改版、GPS 時速表、永久簽章與 Android 7.1.1 相容修復（`v0.4.0`–`v0.5.2`） | 已完成 |
+| [06_Logo設計與指針時速表規劃.md](./06_Logo設計與指針時速表規劃.md) | `單車 60 · 車 160 · 高鐵 400` 精簡規格、實體指針＋數位雙顯儀表與「腳丫丫 + EzGo」Logo 設計規劃 | 規劃定案中 |
 
 ---
 
@@ -38,4 +41,6 @@
 | **Spoke 3** | 本機 CSV 匯出、設定頁與健康平台串聯 | `LocalCsvExporter`、`PreferencesRepository`、`SettingsScreen`、`HealthConnectBridge` (Google Fit) | ✅ 已完成（`v0.2.0`，CSV 匯入還原可後續擴充） |
 | **Spoke 4** | 首頁 UI 與「日/週/月/年」圖表 | 參考圖風格 UI（無廣告）、`日/週/月/年` 頁籤、累計折線圖與長條圖 | ✅ 已完成（`v0.2.0`） |
 | **Spoke 5** | 首頁一鍵截圖與預覽小卡模組 | `ScreenCaptureService` (`MediaProjection` 含狀態列截圖)、儲存相簿與底部預覽小卡 | ✅ 已完成（`v0.3.0`） |
-| **Spoke 6** | GitHub CI/CD 與選用雲端備份 | GitHub Actions 自動測試與建置 APK、GitHub Pages 下載頁、（選用）GAS/Drive 備份 | ⏳ 待啟動 |
+| **Spoke 6** | 首頁暗黑亮黃改版、GPS 時速表與永久簽章 | 4 卡設計、`UnitPill` 修正、三段測速、`keystore` 永久簽章、Android 7.1.1 適配 | ✅ 已完成（`v0.4.0`–`v0.5.2`） |
+| **Spoke 7** | 腳丫丫 EzGo Logo 與指針＋數位雙顯儀表 | `單車 60 · 車 160 · 高鐵 400`、實體指針刻度儀表、全新 Logo 上線 | 📐 分析設計中（`v0.6.0` 規劃） |
+| **Spoke 8** | 本機 CSV 匯入還原與 GitHub CI/CD 官網 | CSV 匯入還原、GitHub Pages 下載頁、（選用）GAS/Drive 備份 | ⏳ 待啟動（詳見 [TODO_LIST.md](./TODO_LIST.md)） |
