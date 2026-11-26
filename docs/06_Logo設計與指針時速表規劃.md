@@ -48,4 +48,4 @@
 - **雙格式輸出**：
   1. **Android 8.0+ Adaptive Icon**（`mipmap-anydpi-v26/ic_launcher.xml`）：背景層 `#0B0E14` + 前景層安全區內（`66%` 中心安全範圍）繪製「腳丫丫 + EzGo」向量/高解析圖層，支援圓形、圓角矩形、水滴形等各廠牌桌面裁切。
   2. **Android 7.x 傳統 PNG 圖示**（`mipmap-mdpi` `48px` 至 `mipmap-xxxhdpi` `192px`）：預先渲染圓角方形透明底版本，確保 OPPO R11s Plus（Android 7.1.1）桌面與安裝器顯示清晰。
-- **預覽圖檔**：詳見本階段產出之設計預覽圖 `docs/assets/ezgo_logo_proposal.png`（待專案負責人確認定案後進行整合）。
+- **預覽圖檔**：詳見本階段產出之設計預覽圖 [ezgo_logo_proposal.jpg](./assets/ezgo_logo_proposal.jpg)（待專案負責人確認定案後進行整合）。
